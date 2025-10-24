@@ -30,7 +30,7 @@ export const Message = ({ message }) => {
 
   return (
     <div className={`p-2 mb-2 rounded transition-all duration-200 ${getMessageStyle()}`}>
-      {renderMessage(textContent)}
+      <div>{textContent}</div>
       {message.status === 'streaming' && (
         <span className="text-xs text-gray-500 ml-2">typing...</span>
       )}

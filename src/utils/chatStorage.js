@@ -57,7 +57,7 @@ export const createChat = async (title = 'New Chat') => {
   // to avoid unnecessary title generation
   await chrome.storage.local.set({ [CHAT_PREFIX + chatId]: [] });
 
-  return chatId;
+  return chatMetadata;
 };
 
 // Load chat messages
