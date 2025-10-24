@@ -4,8 +4,6 @@ import rehypeKatex from 'rehype-katex';
 
 export const renderMessage = (text) => (
   <Markdown
-    remarkPlugins={[remarkMath]}
-    rehypePlugins={[rehypeKatex]}
     components={{
       code({ node, inline, className, children, ...props }) {
         return inline ? (

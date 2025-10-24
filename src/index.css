@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  pre {
+    @apply bg-gray-800 text-gray-200 font-mono text-sm p-4 rounded-md overflow-x-auto;
+  }
+
+  /* Inline code */
+  code {
+    @apply bg-gray-200 text-gray-800 font-mono text-sm px-1 py-0.5 rounded-md;
+  }
+
+  pre code {
+    @apply bg-transparent text-inherit p-0 rounded-none;
+  }
+}
