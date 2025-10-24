@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+ import { useState, useEffect, useRef } from 'react';
+import { Activity } from 'react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
 import { Message } from './components/chat/Message.jsx';
@@ -25,6 +26,12 @@ export default function App() {
   const [selectedModelId, setSelectedModelId] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [status, setStatus] = useState('ready'); // 'ready', 'submitted', 'streaming', 'error'
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [inputValue, setInputValue] = useStorage('inputValue', '');
+
+  // Track streaming operations to prevent race conditions
+  const streamingControllerRef = useRef(null);
+  const isStreamingRef = useRef(false);
 
   // Load chats and current chat on mount
   useEffect(() => {
@@ -53,31 +60,44 @@ export default function App() {
     loadInitialData();
   }, []);
 
-  // Save messages whenever they change
+  // Save messages on unmount to prevent data loss (but not during active operations)
   useEffect(() => {
-    if (currentChatId && messages.length > 0) {
-      saveChatMessages(currentChatId, messages);
-    }
-  }, [messages, currentChatId]);
+    return () => {
+      if (currentChatId && messages.length > 0 && !isStreamingRef.current && status === 'ready') {
+        saveChatMessages(currentChatId, messages, false); // Don't update metadata in cleanup
+      }
+    };
+  }, [currentChatId, messages, status]);
 
   const createNewChat = async () => {
+    // Clear current messages first to avoid race conditions
+    setMessages([]);
+    setStatus('ready');
+    
     const newChatId = await createChat();
     const updatedChats = await getChatsList();
     setChats(updatedChats);
     setCurrentChatIdState(newChatId);
     await setCurrentChatId(newChatId);
-    setMessages([]);
-    setStatus('ready');
   };
 
   const switchChat = async (chatId) => {
     if (chatId === currentChatId) return;
 
+    // Cancel any ongoing operations (streaming or submitted)
+    isStreamingRef.current = false;
+    streamingControllerRef.current = null;
+
+    // Set status first to prevent any race conditions
+    setStatus('ready');
+
+    // Update chat state
     setCurrentChatIdState(chatId);
     await setCurrentChatId(chatId);
+
+    // Load messages for the new chat
     const chatMessages = await loadChatMessages(chatId);
     setMessages(chatMessages);
-    setStatus('ready');
   };
 
   const deleteChatById = async (chatId) => {
@@ -126,6 +146,9 @@ export default function App() {
     setMessages(prev => [...prev, userMessage, aiMessage]);
     setStatus('submitted');
 
+    // Set streaming controller reference early to handle chat switches during submission
+    streamingControllerRef.current = currentChatId;
+
     try {
       const result = await generateResponse(
         selectedModel.id,
@@ -135,9 +158,16 @@ export default function App() {
       );
 
       setStatus('streaming');
+      isStreamingRef.current = true;
+      streamingControllerRef.current = currentChatId;
 
       // Stream the response in real-time
       for await (const part of result.textStream) {
+        // Check if we should still be streaming (user might have switched chats)
+        if (!isStreamingRef.current || currentChatId !== streamingControllerRef.current) {
+          break;
+        }
+
         setMessages(prevMessages =>
           prevMessages.map(msg =>
             msg.id === aiMessageId
@@ -151,31 +181,62 @@ export default function App() {
         );
       }
 
-      // Mark as completed
-      setMessages(prevMessages =>
-        prevMessages.map(msg =>
-          msg.id === aiMessageId
-            ? { ...msg, status: 'ready' }
-            : msg
-        )
-      );
+      // Only mark as completed if we're still in the same chat
+      if (isStreamingRef.current && currentChatId === streamingControllerRef.current) {
+        // Mark as completed
+        setMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg.id === aiMessageId
+              ? { ...msg, status: 'ready' }
+              : msg
+          )
+        );
 
-      setStatus('ready');
-    } catch (error) {
-      console.error('Error generating response:', error);
-      setMessages(prevMessages =>
-        prevMessages.map(msg =>
-          msg.id === aiMessageId
-            ? {
-                ...msg,
-                parts: [{ type: 'text', text: 'Sorry, there was an error generating the response.' }],
-                status: 'error'
-              }
-            : msg
-        )
-      );
-      setStatus('error');
-    }
+        setStatus('ready');
+      }
+
+      // Clean up streaming state
+      isStreamingRef.current = false;
+      streamingControllerRef.current = null;
+
+       // Save messages and update chat metadata
+       const updatedChats = await saveChatMessages(currentChatId, messages);
+       // Use the returned chats list for immediate UI refresh, or fallback to fresh fetch
+       if (updatedChats) {
+         setChats([...updatedChats]);
+       } else {
+         const freshChats = await getChatsList();
+         setChats([...freshChats]);
+       }
+     } catch (error) {
+       console.error('Error generating response:', error);
+       setMessages(prevMessages =>
+         prevMessages.map(msg =>
+           msg.id === aiMessageId
+             ? {
+                 ...msg,
+                 parts: [{ type: 'text', text: 'Sorry, there was an error generating the response.' }],
+                 status: 'error'
+               }
+             : msg
+         )
+       );
+        setStatus('error');
+
+        // Clean up streaming state on error
+        isStreamingRef.current = false;
+        streamingControllerRef.current = null;
+
+        // Save messages even on error
+        const updatedChats = await saveChatMessages(currentChatId, messages);
+        // Use the returned chats list for immediate UI refresh, or fallback to fresh fetch
+        if (updatedChats) {
+          setChats([...updatedChats]);
+        } else {
+          const freshChats = await getChatsList();
+          setChats([...freshChats]);
+        }
+     }
   };
 
   const changeModel = (modelId) => {
@@ -196,7 +257,10 @@ export default function App() {
   };
 
   const stopGeneration = () => {
-    // For now, just reset status - in a real implementation you'd abort the stream
+    // Cancel streaming operation
+    isStreamingRef.current = false;
+    streamingControllerRef.current = null;
+
     setStatus('ready');
     // Mark any streaming message as stopped
     setMessages(prevMessages =>
@@ -231,19 +295,24 @@ export default function App() {
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Chat Sidebar */}
-      <ChatSidebar
-        chats={chats}
-        currentChatId={currentChatId}
-        onNewChat={createNewChat}
-        onSelectChat={switchChat}
-        onDeleteChat={deleteChatById}
-      />
+      <Activity mode={sidebarVisible ? 'visible' : 'hidden'}>
+        <ChatSidebar
+          chats={chats}
+          currentChatId={currentChatId}
+          onNewChat={createNewChat}
+          onSelectChat={switchChat}
+          onDeleteChat={deleteChatById}
+        />
+      </Activity>
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         <div className="flex justify-between items-center p-4 border-b border-gray-200 bg-white">
           <h1 className="text-lg font-bold">AI Chat</h1>
           <div className="flex items-center space-x-2">
+            <button onClick={() => setSidebarVisible(!sidebarVisible)} className="bg-gray-500 text-white px-3 py-1 text-sm rounded hover:bg-gray-600">
+              {sidebarVisible ? 'Hide' : 'Show'} Sidebar
+            </button>
             <ModelSelector selectedModel={selectedModel} onChange={changeModel} />
             <button onClick={clearSettings} className="bg-red-500 text-white px-3 py-1 text-sm rounded hover:bg-red-600">
               Clear All
@@ -265,7 +334,7 @@ export default function App() {
 
         <div className="p-4 border-t border-gray-200 bg-white">
           <div className="flex items-center space-x-2">
-            <ChatInput onSend={handleSend} status={status} />
+            <ChatInput onSend={handleSend} status={status} inputValue={inputValue} setInputValue={setInputValue} />
             {(status === 'submitted' || status === 'streaming') && (
               <button
                 onClick={stopGeneration}

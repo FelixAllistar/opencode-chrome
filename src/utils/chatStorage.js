@@ -53,8 +53,9 @@ export const createChat = async (title = 'New Chat') => {
   chats.unshift(chatMetadata); // Add to beginning
   await saveChatsList(chats);
 
-  // Create empty messages array
-  await saveChatMessages(chatId, []);
+  // Create empty messages array directly without calling saveChatMessages
+  // to avoid unnecessary title generation
+  await chrome.storage.local.set({ [CHAT_PREFIX + chatId]: [] });
 
   return chatId;
 };
@@ -71,32 +72,40 @@ export const loadChatMessages = async (chatId) => {
 };
 
 // Save chat messages
-export const saveChatMessages = async (chatId, messages) => {
+export const saveChatMessages = async (chatId, messages, updateMetadata = true) => {
   try {
     await chrome.storage.local.set({ [CHAT_PREFIX + chatId]: messages });
 
-    // Update chat metadata
-    const chats = await getChatsList();
-    const chatIndex = chats.findIndex(chat => chat.id === chatId);
+    // Update chat metadata only if requested (prevents cleanup effect from updating titles)
+    if (updateMetadata) {
+      const chats = await getChatsList();
+      const chatIndex = chats.findIndex(chat => chat.id === chatId);
 
-    if (chatIndex !== -1) {
-      const lastMessage = messages.length > 0 ?
-        messages[messages.length - 1] : null;
+      if (chatIndex !== -1) {
+        const lastMessage = messages.length > 0 ?
+          messages[messages.length - 1] : null;
 
-      chats[chatIndex] = {
-        ...chats[chatIndex],
-        updatedAt: Date.now(),
-        messageCount: messages.length,
-        lastMessage: lastMessage && lastMessage.role === 'user' ?
-          lastMessage.parts.find(p => p.type === 'text')?.text || '' : '',
-        title: messages.length > 0 ?
-          generateChatTitle(messages) : chats[chatIndex].title
-      };
+        // Only update title if there are user messages and the current title is still "New Chat"
+        const hasUserMessages = messages.some(msg => msg.role === 'user');
+        const shouldUpdateTitle = hasUserMessages && (chats[chatIndex].title === 'New Chat' || !chats[chatIndex].title);
 
-      await saveChatsList(chats);
+        chats[chatIndex] = {
+          ...chats[chatIndex],
+          updatedAt: Date.now(),
+          messageCount: messages.length,
+          lastMessage: lastMessage && lastMessage.role === 'user' ?
+            lastMessage.parts.find(p => p.type === 'text')?.text || '' : '',
+          title: shouldUpdateTitle ? generateChatTitle(messages) : chats[chatIndex].title
+        };
+
+        await saveChatsList(chats);
+        return chats; // Return updated chats list for immediate UI refresh
+      }
     }
+    return null;
   } catch (error) {
     console.error('Error saving chat messages:', error);
+    return null;
   }
 };
 
@@ -120,8 +129,10 @@ const generateChatTitle = (messages) => {
   const firstUserMessage = messages.find(msg => msg.role === 'user');
   if (firstUserMessage) {
     const text = firstUserMessage.parts.find(p => p.type === 'text')?.text || '';
-    // Take first 30 characters and add ellipsis if needed
-    return text.length > 30 ? text.substring(0, 30) + '...' : text;
+    if (text.trim()) {
+      // Take first 30 characters and add ellipsis if needed
+      return text.length > 30 ? text.substring(0, 30) + '...' : text;
+    }
   }
   return 'New Chat';
 };
