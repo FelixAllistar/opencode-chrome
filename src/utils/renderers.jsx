@@ -1,9 +1,7 @@
-import Markdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
+import { Streamdown } from 'streamdown';
 
 export const renderMessage = (text) => (
-  <Markdown
+  <Streamdown
     components={{
       code({ node, inline, className, children, ...props }) {
         return inline ? (
@@ -19,5 +17,5 @@ export const renderMessage = (text) => (
     }}
   >
     {text}
-  </Markdown>
+  </Streamdown>
 );
