@@ -67,29 +67,6 @@ A powerful Chrome extension for Helium browser that provides an AI chat sidebar 
 - **Model Switching**: Change AI models per chat or globally
 - **Rich Content**: AI responses support Markdown formatting and LaTeX equations
 
-## 🏗️ Architecture
-
-### Core Components
-- **`App.jsx`**: Main application with chat management and UI state
-- **`ChatSidebar.jsx`**: Sidebar component for chat navigation and management
-- **`Message.jsx`**: Individual message rendering with status styling
-- **`ChatInput.jsx`**: Input component with status-aware controls
-- **`chatStorage.js`**: Chrome storage utilities for persistence
-
-### Key Technologies
-- **React 19**: Modern React with hooks for state management
-- **Vercel AI SDK 5**: Latest AI SDK for streaming and model integration
-- **Chrome Storage API**: Persistent storage for chats and settings
-- **Tailwind CSS**: Utility-first CSS framework for styling
-- **Vite**: Fast build tool and development server
-
-### Data Flow
-1. **User Input** → `ChatInput` → `handleSend` in `App.jsx`
-2. **AI Processing** → Direct API calls to OpenCode Zen endpoints
-3. **Real-time Streaming** → Updates UI with live text chunks
-4. **Persistence** → Auto-saves to Chrome storage on message changes
-5. **Chat Management** → CRUD operations via `chatStorage.js` utilities
-
 ## 🔧 Development
 
 ### Prerequisites
@@ -114,30 +91,12 @@ npm run build
 # - Load unpacked from dist/
 ```
 
-### Project Structure
-```
-src/
-├── components/
-│   ├── ChatSidebar.jsx    # Chat list and navigation
-│   ├── Message.jsx        # Individual message display
-│   └── ChatInput.jsx      # Message input with controls
-├── hooks/
-│   └── useStorage.js      # Chrome storage hook
-├── services/
-│   └── ai/
-│       ├── client.js      # AI SDK integration
-│       └── providers.js   # Model provider setup
-├── utils/
-│   ├── chatStorage.js     # Chat persistence utilities
-│   └── constants.js       # App constants
-└── App.jsx                # Main application
-```
-
 ### Adding New Features
 - **New Models**: Add to `providers.js` and update the models list
 - **UI Components**: Follow the existing component patterns
 - **Storage**: Use `chatStorage.js` for persistence needs
 - **AI Features**: Leverage Vercel AI SDK 5 capabilities
+- **Rich Content**: Streamdown handles Markdown/LaTeX automatically in `renderers.jsx`
 
 ## 🔒 Security & Privacy
 
