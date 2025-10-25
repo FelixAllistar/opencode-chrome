@@ -247,6 +247,7 @@ export default function App() {
 
   const clearSettings = () => {
     chrome.storage.sync.clear();
+    chrome.storage.local.clear();
     setApiKey('');
     setSelectedModelId(MODELS[0].id);
     setChatsData({});

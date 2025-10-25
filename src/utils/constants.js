@@ -8,5 +8,7 @@ export const MODELS = [
   { id: 'claude-opus-4-1', name: 'Claude Opus 4.1', type: 'anthropic' },
   { id: 'qwen3-coder', name: 'Qwen3 Coder 480B', type: 'openai-compatible' },
   { id: 'grok-code', name: 'Grok Code Fast 1', type: 'openai-compatible' },
-  { id: 'kimi-k2', name: 'Kimi K2', type: 'openai-compatible' }
+  { id: 'kimi-k2', name: 'Kimi K2', type: 'openai-compatible' },
+  { id: 'code-supernova', name: 'Code Supernova', type: 'openai-compatible' },
+  { id: 'big-pickle', name: 'Big Pickle', type: 'openai-compatible' }
 ];
