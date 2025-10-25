@@ -1,4 +1,5 @@
 import { Streamdown } from 'streamdown';
+import remarkMath from 'remark-math';
 
 export const Message = ({ message }) => {
   const isUser = message.role === 'user';
@@ -28,12 +29,12 @@ export const Message = ({ message }) => {
     }
   };
 
-  return (
-    <div className={`p-2 mb-2 rounded transition-all duration-200 ${getMessageStyle()}`}>
-      <Streamdown>{textContent}</Streamdown>
-      {message.status === 'streaming' && (
-        <span className="text-xs text-gray-500 ml-2">typing...</span>
-      )}
-    </div>
-  );
+   return (
+     <div className={`p-2 mb-2 rounded transition-all duration-200 ${getMessageStyle()}`}>
+       <Streamdown remarkPlugins={[[remarkMath, { singleDollarTextMath: true }]]}>{textContent}</Streamdown>
+       {message.status === 'streaming' && (
+         <span className="text-xs text-gray-500 ml-2">typing...</span>
+       )}
+     </div>
+   );
 };

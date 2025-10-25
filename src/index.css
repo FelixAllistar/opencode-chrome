@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@source "../node_modules/streamdown/dist/index.js";
+
 @layer components {
   pre {
     @apply bg-gray-800 text-gray-200 font-mono text-sm p-4 rounded-md overflow-x-auto;
