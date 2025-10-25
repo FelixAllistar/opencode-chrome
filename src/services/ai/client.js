@@ -1,11 +1,11 @@
-import { streamText } from 'ai';
+import { streamText, convertToModelMessages } from 'ai';
 import { getProvider } from './providers.js';
 
-export const generateResponse = async (modelId, type, input, apiKey) => {
+export const generateResponse = async (modelId, type, messages, apiKey) => {
   const model = getProvider(modelId, type, apiKey);
   const result = streamText({
     model,
-    prompt: input,
+    messages: convertToModelMessages(messages),
   });
 
   return result;

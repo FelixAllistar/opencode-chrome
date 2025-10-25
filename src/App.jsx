@@ -153,6 +153,9 @@ export default function App() {
       status: 'submitted'
     };
 
+    // Collect messages for AI (up to the current user message - don't include the empty AI response)
+    const messagesToSend = [...(chatsDataRef.current[chatId]?.messages || []), userMessage];
+
     // Update state immediately
     setChatsData(prev => ({
       ...prev,
@@ -164,7 +167,7 @@ export default function App() {
     }));
 
     try {
-      const result = await generateResponse(selectedModel.id, selectedModel.type, input, apiKey);
+      const result = await generateResponse(selectedModel.id, selectedModel.type, messagesToSend, apiKey);
 
       setChatsData(prev => ({
         ...prev,
