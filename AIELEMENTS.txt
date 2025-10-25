@@ -1,0 +1,59 @@
+actions.tsx: The `Actions` component is a flexible container for grouping action buttons, while `Action` is an individual button with optional tooltip support. Use it for UI elements like toolbars or control panels requiring small, accessible buttons with hover descriptions.
+
+artifact.tsx: The Artifact component provides a structured UI container for displaying AI-generated content (e.g., code, images, or outputs) with optional header, title, description, actions, and close button. Use it in chat interfaces to render artifacts with consistent styling and interactivity.
+
+branch.tsx: The Branch component manages multiple branches of content (e.g., alternative AI responses) in a chat interface, providing navigation controls like previous/next buttons and a page indicator. Use it when displaying multiple response variations or branches in AI conversations, allowing users to switch between them.
+
+canvas.tsx: The Canvas component wraps ReactFlow to create an interactive node-based diagram canvas, with custom controls, background styling, and pan/zoom behaviors. Use it for visualizing and editing AI workflows, such as chains of thought or task flows, in the browser extension's UI.
+
+chain-of-thought.tsx: The ChainOfThought component renders a collapsible UI for displaying AI reasoning steps, including headers, individual steps with icons and statuses, search results, and images. Use it in chat interfaces or AI response displays to show structured, step-by-step thought processes.
+
+code-block.tsx: The CodeBlock component renders syntax-highlighted code using react-syntax-highlighter, supporting light/dark themes, optional line numbers, and a copy button. It provides a context for accessing the code string. Use it to display code snippets in AI-generated content or user interfaces.
+
+connection.tsx: The Connection component renders a curved animated line with a circle endpoint to visualize connections between nodes in a flow diagram, using React Flow's ConnectionLineComponent. Use it in flow-based UIs, such as AI workflow canvases or node graphs, to represent links between elements.
+
+context.tsx: The Context component is a hover card that displays AI model context usage, including token consumption, progress bars, and estimated costs for input, output, reasoning, and cache tokens. Use it in AI chat interfaces or model interaction UIs to provide users with real-time feedback on context limits and costs.
+
+controls.tsx: The Controls component wraps React Flow's ControlsPrimitive to render interactive control buttons (e.g., zoom, fit view) for flow diagrams or canvases, with custom Tailwind-based styling for a card-like appearance. Use it within React Flow components to provide user controls for navigating and manipulating the diagram view.
+
+conversation.tsx: The Conversation component provides a scrollable container for chat messages with auto-stick-to-bottom behavior, an empty state display, and a scroll-to-bottom button. Use it for rendering conversation threads in AI chat interfaces.
+
+edge.tsx: The `Edge` component provides two types of edges for flow diagrams using @xyflow/react: `Temporary` for dashed preview connections and `Animated` for curved edges with a moving circle marker. Use it in node-based editors to visually represent connections between nodes, with `Temporary` for drag previews and `Animated` for active flows.
+
+image.tsx: The `Image` component renders AI-generated images by converting base64 data into an `<img>` element with responsive styling. It accepts props like `base64`, `mediaType`, and optional `className` or `alt` text. Use it to display images produced by AI models in chat messages or UI elements.
+
+inline-citation.tsx: The InlineCitation component renders inline citations as badges that, on hover, display source details in a card, with carousel navigation for multiple sources. Use it to cite references within AI-generated text or content.
+
+loader.tsx: The Loader component renders a spinning SVG icon to indicate loading or processing states. Use it during asynchronous operations like API calls, data fetching, or when waiting for user actions to complete.
+
+message.tsx: The `Message` component renders individual messages in an AI chat interface, with variants for user and assistant roles, including content styling and avatars. Use it to display conversation history in chat applications.
+
+node.tsx: The `Node` component is a customizable card-based element for flow diagrams, integrating with React Flow to optionally display connection handles on the left (target) and right (source). It includes sub-components like `NodeHeader`, `NodeTitle`, `NodeContent`, and `NodeFooter` for structured content. Use it to build interactive nodes in a canvas-based UI, such as for AI workflows or process visualizations.
+
+open-in-chat.tsx: This component renders a dropdown menu with options to open a provided query string in external AI chat platforms (e.g., ChatGPT, Claude, Scira, v0, Cursor, T3 Chat). It uses a context to share the query and generates URLs dynamically. Use it in UI elements where users might want to export or continue a prompt in another AI tool.
+
+panel.tsx: The Panel component is a styled wrapper for React Flow's Panel primitive, applying custom Tailwind classes for appearance. Use it to display UI panels like toolbars or controls within flow diagrams or canvases in AI interaction elements.
+
+plan.tsx: The Plan component is a collapsible card UI element for displaying AI-generated plans or steps, featuring sub-components like header, title, description, content, and footer. It supports streaming states with shimmer effects on title and description. Use it in AI chat interfaces to present structured, expandable plans during conversations, particularly when content is being streamed in real-time.
+
+prompt-input.tsx: PromptInput is a comprehensive React component for AI chat input interfaces, handling text prompts, file attachments, speech recognition, and UI controls like submit buttons and model selectors. Use it in conversational AI apps requiring rich input features, such as drag-and-drop files, voice input, or global state management via providers.
+
+queue.tsx: The Queue component renders a collapsible list of items (e.g., tasks, messages, or todos) with indicators, content, descriptions, actions, and attachments. Use it for displaying queues in AI interfaces, like pending tasks or message histories.
+
+reasoning.tsx: The Reasoning component is a collapsible UI element that displays AI reasoning or thought processes in a chat interface. It auto-opens during streaming with a "Thinking..." shimmer, tracks duration, and auto-closes after streaming ends. Use it to show intermediate AI reasoning steps in responses.
+
+response.tsx: The Response component is a memoized React wrapper around the Streamdown library, used for rendering AI-generated text with Markdown and LaTeX support. It applies custom CSS classes for full-size display and margin adjustments. Use it to display formatted responses in chat or AI interaction components.
+
+shimmer.tsx: The Shimmer component applies a continuous shimmering animation to text by animating the background position, creating a highlight effect that sweeps across the content. It uses Framer Motion for smooth transitions and supports customization of duration and spread based on text length. Use it for loading states, placeholders, or to emphasize text elements in the UI.
+
+sources.tsx: The Sources component provides a collapsible UI for displaying a list of sources (e.g., references or citations) with clickable links and icons. Use it in AI-generated content or responses to show supporting materials in a space-efficient, expandable format.
+
+suggestion.tsx: The `Suggestions` component is a horizontally scrollable container for displaying multiple suggestion items, using a ScrollArea with hidden horizontal scrollbar. The `Suggestion` component renders an individual clickable button that displays a suggestion string and calls an optional `onClick` handler with the suggestion when clicked. Use it in chat interfaces to present AI-generated or predefined suggestions, allowing users to quickly select and insert options into their input.
+
+task.tsx: The Task component is a collapsible UI element for displaying AI tasks or steps (e.g., searches, file operations) in chat responses. It includes a trigger with a search icon and expandable content. Use it to organize and hide/show task details in AI-generated content.
+
+tool.tsx: The Tool component renders AI tool executions in a collapsible UI, displaying inputs, outputs, and status (e.g., pending, running, completed, error). Use it in AI chat interfaces to visualize tool calls and their results.
+
+toolbar.tsx: The Toolbar component wraps React Flow's NodeToolbar to create a styled, bottom-positioned toolbar for nodes in a flow diagram. It applies background, border, and padding styles using Tailwind CSS, and allows for additional className customization. Use it to attach action buttons or controls to individual nodes in a React Flow canvas, such as for editing, deleting, or interacting with node elements.
+
+web-preview.tsx: The WebPreview component provides an iframe-based web preview interface with URL navigation, a collapsible console for logs, and customizable sub-components. Use it to embed and preview web pages within the app, enabling users to input URLs, navigate, and inspect console output.
