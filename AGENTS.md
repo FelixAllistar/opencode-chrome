@@ -1,9 +1,9 @@
 # Agent Guidelines for OpenCode Browser Extension
 
 ## Commands
-- **Build**: `npm run build` (production build to dist/)
-- **Dev**: `npm run dev` (watch mode build)
-- **Test**: No tests configured (npm test errors out)
+- **Build**: `pnpm run build` (production build to dist/)
+- **Dev**: `pnpm run dev` (watch mode build)
+- **Test**: No tests configured (pnpm test errors out)
 - **Lint/Typecheck**: No linting or type checking scripts defined
 
 ## Code Style
