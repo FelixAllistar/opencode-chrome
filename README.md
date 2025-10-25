@@ -46,6 +46,8 @@ A powerful Chrome extension for Helium browser that provides an AI chat sidebar 
 | Qwen3 Coder 480B | `qwen3-coder` | Alibaba | Code-focused, programming tasks |
 | Grok Code Fast 1 | `grok-code` | xAI | Code generation, technical assistance |
 | Kimi K2 | `kimi-k2` | Moonshot | General purpose, multilingual |
+| Code Supernova | `code-supernova` | OpenCode | Advanced code generation, complex programming |
+| Big Pickle | `big-pickle` | OpenCode | Large context, comprehensive analysis |
 
 **Note**: Model IDs in OpenCode use the format `opencode/<model-id>` (e.g., `opencode/gpt-5-codex`)
 
