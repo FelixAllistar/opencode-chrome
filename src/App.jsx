@@ -373,93 +373,99 @@ export default function App() {
         onSelectChat={switchChat}
         onDeleteChat={deleteChatById}
       />
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-          <div className="flex items-center gap-2 px-4">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink href="#">
-                    AI Chat
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator className="hidden md:block" />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Chat' : 'No Chat'}</BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
-             <div className="ml-auto flex items-center space-x-2">
-               <button onClick={clearSettings} className="bg-red-500 text-white px-3 py-1 text-sm rounded hover:bg-red-600">
-                 Clear All
-               </button>
+       <SidebarInset className="h-screen flex flex-col">
+         <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+           <div className="flex items-center gap-2 px-4">
+             <SidebarTrigger className="-ml-1" />
+             <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+             <Breadcrumb>
+               <BreadcrumbList>
+                 <BreadcrumbItem className="hidden md:block">
+                   <BreadcrumbLink href="#">
+                     AI Chat
+                   </BreadcrumbLink>
+                 </BreadcrumbItem>
+                 <BreadcrumbSeparator className="hidden md:block" />
+                 <BreadcrumbItem>
+                   <BreadcrumbPage>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Chat' : 'No Chat'}</BreadcrumbPage>
+                 </BreadcrumbItem>
+               </BreadcrumbList>
+             </Breadcrumb>
+              <div className="ml-auto flex items-center space-x-2">
+                <button onClick={clearSettings} className="bg-red-500 text-white px-3 py-1 text-sm rounded hover:bg-red-600">
+                  Clear All
+                </button>
+              </div>
+           </div>
+         </header>
+           <div className="flex-1 overflow-hidden">
+             <div className="h-full flex flex-col">
+                <div className="flex-1 overflow-auto p-4 pt-0 pb-48">
+                 <Conversation>
+                   <ConversationContent>
+                     {currentChatMessages.length === 0 ? (
+                       <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
+                         <div className="space-y-1">
+                           <h3 className="font-medium text-sm">No messages yet</h3>
+                           <p className="text-muted-foreground text-sm">Start a conversation to see messages here</p>
+                         </div>
+                       </div>
+                     ) : (
+                       currentChatMessages.map((msg, i) => {
+                         const uiMessage = toUIMessage(msg);
+                         return (
+                           <Branch key={`${currentChatId}-${i}`}>
+                             <BranchMessages>
+                                <Message from={msg.role}>
+                                  <MessageContent>
+                                    <Response>{uiMessage.content}</Response>
+                                  </MessageContent>
+                                  {msg.role === 'assistant' && (
+                                    <MessageAvatar
+                                      name="AI"
+                                      src="https://github.com/openai.png"
+                                    />
+                                  )}
+                                </Message>
+                             </BranchMessages>
+                           </Branch>
+                         );
+                       })
+                     )}
+                   </ConversationContent>
+                   <ConversationScrollButton />
+                 </Conversation>
+               </div>
+                <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-4 z-10">
+                 <PromptInput onSubmit={handleSend}>
+                   <PromptInputBody>
+                     <PromptInputTextarea />
+                   </PromptInputBody>
+                   <PromptInputFooter>
+                     <PromptInputTools>
+                       <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
+                         <PromptInputModelSelectTrigger>
+                           <PromptInputModelSelectValue />
+                         </PromptInputModelSelectTrigger>
+                         <PromptInputModelSelectContent>
+                           {MODELS.map((model) => (
+                             <PromptInputModelSelectItem
+                               key={model.id}
+                               value={model.id}
+                             >
+                               {model.name}
+                             </PromptInputModelSelectItem>
+                           ))}
+                         </PromptInputModelSelectContent>
+                       </PromptInputModelSelect>
+                     </PromptInputTools>
+                     <PromptInputSubmit status={currentChatStatus} />
+                   </PromptInputFooter>
+                 </PromptInput>
+               </div>
              </div>
-          </div>
-        </header>
-         <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-          <Conversation>
-            <ConversationContent>
-              {currentChatMessages.length === 0 ? (
-                <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
-                  <div className="space-y-1">
-                    <h3 className="font-medium text-sm">No messages yet</h3>
-                    <p className="text-muted-foreground text-sm">Start a conversation to see messages here</p>
-                  </div>
-                </div>
-              ) : (
-                currentChatMessages.map((msg, i) => {
-                  const uiMessage = toUIMessage(msg);
-                  return (
-                    <Branch key={`${currentChatId}-${i}`}>
-                      <BranchMessages>
-                         <Message from={msg.role}>
-                           <MessageContent>
-                             <Response>{uiMessage.content}</Response>
-                           </MessageContent>
-                           {msg.role === 'assistant' && (
-                             <MessageAvatar
-                               name="AI"
-                               src="https://github.com/openai.png"
-                             />
-                           )}
-                         </Message>
-                      </BranchMessages>
-                    </Branch>
-                  );
-                })
-              )}
-            </ConversationContent>
-            <ConversationScrollButton />
-          </Conversation>
-            <PromptInput onSubmit={handleSend}>
-              <PromptInputBody>
-                <PromptInputTextarea />
-              </PromptInputBody>
-              <PromptInputFooter>
-                <PromptInputTools>
-                  <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
-                    <PromptInputModelSelectTrigger>
-                      <PromptInputModelSelectValue />
-                    </PromptInputModelSelectTrigger>
-                    <PromptInputModelSelectContent>
-                      {MODELS.map((model) => (
-                        <PromptInputModelSelectItem
-                          key={model.id}
-                          value={model.id}
-                        >
-                          {model.name}
-                        </PromptInputModelSelectItem>
-                      ))}
-                    </PromptInputModelSelectContent>
-                  </PromptInputModelSelect>
-                </PromptInputTools>
-                <PromptInputSubmit status={currentChatStatus} />
-              </PromptInputFooter>
-            </PromptInput>
-          </div>
-        </SidebarInset>
+           </div>
+         </SidebarInset>
     </SidebarProvider>
   );
 }
