@@ -19,8 +19,8 @@ A powerful Chrome extension for Helium browser that provides an AI chat sidebar 
 
 2. **Build Extension**:
    ```bash
-   npm install
-   npm run build
+   pnpm install
+   pnpm run build
    ```
 
 3. **Load in Browser**:
@@ -49,7 +49,7 @@ A powerful Chrome extension for Helium browser that provides an AI chat sidebar 
 | Code Supernova | `code-supernova` | OpenCode | Advanced code generation, complex programming |
 | Big Pickle | `big-pickle` | OpenCode | Large context, comprehensive analysis |
 
-**Note**: Model IDs in OpenCode use the format `opencode/<model-id>` (e.g., `opencode/gpt-5-codex`)
+**Note**: Model IDs are used directly as shown in the table above (e.g., `gpt-5-codex`)
 
 ## 🎯 How to Use
 
@@ -79,13 +79,13 @@ A powerful Chrome extension for Helium browser that provides an AI chat sidebar 
 ### Development Workflow
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Start development server (if needed)
-npm run dev
+pnpm run dev
 
 # Build for production
-npm run build
+pnpm run build
 
 # Load extension in browser
 # - Go to chrome://extensions/
@@ -98,7 +98,7 @@ npm run build
 - **UI Components**: Follow the existing component patterns
 - **Storage**: Use `chatStorage.js` for persistence needs
 - **AI Features**: Leverage Vercel AI SDK 5 capabilities
-- **Rich Content**: Streamdown handles Markdown/LaTeX automatically in `renderers.jsx`
+- **Rich Content**: Streamdown handles Markdown/LaTeX automatically via AI Elements components
 
 ## 🔒 Security & Privacy
 
