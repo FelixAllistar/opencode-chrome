@@ -414,18 +414,17 @@ export default function App() {
                   return (
                     <Branch key={`${currentChatId}-${i}`}>
                       <BranchMessages>
-                        <Message from={msg.role}>
-                          <MessageContent>
-                            <Response>{uiMessage.content}</Response>
-                          </MessageContent>
-                          <MessageAvatar
-                            name={msg.role === 'user' ? 'You' : 'AI'}
-                            src={msg.role === 'user'
-                              ? 'https://github.com/haydenbleasel.png'
-                              : 'https://github.com/openai.png'
-                            }
-                          />
-                        </Message>
+                         <Message from={msg.role}>
+                           <MessageContent>
+                             <Response>{uiMessage.content}</Response>
+                           </MessageContent>
+                           {msg.role === 'assistant' && (
+                             <MessageAvatar
+                               name="AI"
+                               src="https://github.com/openai.png"
+                             />
+                           )}
+                         </Message>
                       </BranchMessages>
                     </Branch>
                   );
