@@ -1,5 +1,7 @@
 # Agent Guidelines for OpenCode Browser Extension
 
+NEVER run pnpm build or pnpm run dev. the user will be responsible for building. 
+
 ## Commands
 - **Build**: `pnpm run build` (production build to dist/)
 - **Dev**: `pnpm run dev` (watch mode build)
