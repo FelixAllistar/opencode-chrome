@@ -1,10 +1,8 @@
- import { useState, useEffect, useRef } from 'react';
-import { Activity } from 'react';
+  import { useState, useEffect, useRef } from 'react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
-import { Message } from './components/chat/Message.jsx';
-import { ChatInput } from './components/chat/ChatInput.jsx';
-import { ModelSelector } from './components/settings/ModelSelector.jsx';
+
+
 import { generateResponse } from './services/ai/client.js';
 import {
   getChatsList,
@@ -15,7 +13,52 @@ import {
   getCurrentChatId,
   setCurrentChatId
 } from './utils/chatStorage.js';
-import { ChatSidebar } from './components/ChatSidebar.jsx';
+import { AppSidebar } from './components/app-sidebar.jsx';
+import {
+  SidebarProvider,
+  SidebarInset,
+  SidebarTrigger,
+} from './components/ui/sidebar.jsx';
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from './components/ui/breadcrumb.jsx';
+import { Separator } from './components/ui/separator.jsx';
+
+import { Response } from './components/ai-elements/response.tsx';
+import {
+  Branch,
+  BranchMessages,
+} from './components/ai-elements/branch.tsx';
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from './components/ai-elements/conversation.tsx';
+import {
+  Message,
+  MessageAvatar,
+  MessageContent,
+} from './components/ai-elements/message.tsx';
+import { toUIMessage } from './utils/messageUtils.js';
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputModelSelect,
+  PromptInputModelSelectContent,
+  PromptInputModelSelectItem,
+  PromptInputModelSelectTrigger,
+  PromptInputModelSelectValue,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from './components/ai-elements/prompt-input.tsx';
+
 
 export default function App() {
   const [chatsData, setChatsData] = useState({});
@@ -25,11 +68,19 @@ export default function App() {
   const [selectedModelId, setSelectedModelId] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [sidebarVisible, setSidebarVisible] = useState(true);
-  const [inputValue, setInputValue] = useStorage('inputValue', '');
+
+
 
   // Ref to hold the latest chatsData to solve stale state in async callbacks
   const chatsDataRef = useRef();
   chatsDataRef.current = chatsData;
+
+  // Derived state from chatsData
+  const chats = Object.values(chatsData).map(c => c.metadata).sort((a, b) => b.updatedAt - a.updatedAt);
+  const currentChatMessages = chatsData[currentChatId]?.messages || [];
+  const currentChatStatus = chatsData[currentChatId]?.status || 'ready';
+
+
 
   // Load chats and current chat on mount
   useEffect(() => {
@@ -54,22 +105,27 @@ export default function App() {
         await setCurrentChatId(activeChatId);
       }
       
-      if (activeChatId && newChatsData[activeChatId]) {
-        const chatMessages = await loadChatMessages(activeChatId);
-        newChatsData[activeChatId].messages = chatMessages;
-        setCurrentChatIdState(activeChatId);
-      }
+       if (activeChatId && newChatsData[activeChatId]) {
+         const chatMessages = await loadChatMessages(activeChatId);
+         newChatsData[activeChatId].messages = chatMessages;
+         setCurrentChatIdState(activeChatId);
+       } else if (!activeChatId) {
+         const newChat = await createChat();
+         activeChatId = newChat.id;
+         await setCurrentChatId(activeChatId);
+         newChatsData[activeChatId] = {
+           metadata: newChat,
+           messages: [],
+           status: 'ready'
+         };
+         setCurrentChatIdState(activeChatId);
+       }
 
-      setChatsData(newChatsData);
+       setChatsData(newChatsData);
     };
 
     loadInitialData();
   }, []);
-
-  // Derived state from chatsData
-  const chats = Object.values(chatsData).map(c => c.metadata).sort((a, b) => b.updatedAt - a.updatedAt);
-  const currentChatMessages = chatsData[currentChatId]?.messages || [];
-  const currentChatStatus = chatsData[currentChatId]?.status || 'ready';
 
   const createNewChat = async () => {
     const newChatMetadata = await createChat();
@@ -131,18 +187,21 @@ export default function App() {
     setSelectedModelId(selectedModel.id);
   };
 
-  const handleSend = async (input) => {
+  const handleSend = async (message, event) => {
     let chatId = currentChatId;
     if (!chatId) {
       chatId = await createNewChat();
     }
 
-    if (!apiKey || !input.trim() || chatsDataRef.current[chatId]?.status !== 'ready') return;
+    const hasText = Boolean(message.text);
+    const hasAttachments = Boolean(message.files?.length);
+
+    if (!apiKey || !(hasText || hasAttachments) || chatsDataRef.current[chatId]?.status !== 'ready') return;
 
     const userMessage = {
       id: Date.now().toString(),
       role: 'user',
-      parts: [{ type: 'text', text: input }]
+      parts: [{ type: 'text', text: message.text || 'Sent with attachments' }]
     };
 
     const aiMessageId = (Date.now() + 1).toString();
@@ -219,7 +278,7 @@ export default function App() {
           )
         }
       }));
-      
+
       // Save messages regardless of outcome, using the ref to get latest state
       const finalMessages = chatsDataRef.current[chatId]?.messages || [];
       const updatedChatsList = await saveChatMessages(chatId, finalMessages);
@@ -298,7 +357,6 @@ export default function App() {
           placeholder="API Key"
           type="password"
         />
-        <ModelSelector selectedModel={selectedModel} onChange={changeModel} />
         <button onClick={saveSettings} className="bg-blue-500 text-white px-4 py-2 rounded">
           Save & Start
         </button>
@@ -307,59 +365,102 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Chat Sidebar */}
-      <Activity mode={sidebarVisible ? 'visible' : 'hidden'}>
-        <ChatSidebar
-          chats={chats}
-          currentChatId={currentChatId}
-          onNewChat={createNewChat}
-          onSelectChat={switchChat}
-          onDeleteChat={deleteChatById}
-        />
-      </Activity>
-
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        <div className="flex justify-between items-center p-4 border-b border-gray-200 bg-white">
-          <h1 className="text-lg font-bold">AI Chat</h1>
-          <div className="flex items-center space-x-2">
-            <button onClick={() => setSidebarVisible(!sidebarVisible)} className="bg-gray-500 text-white px-3 py-1 text-sm rounded hover:bg-gray-600">
-              {sidebarVisible ? 'Hide' : 'Show'} Sidebar
-            </button>
-            <ModelSelector selectedModel={selectedModel} onChange={changeModel} />
-            <button onClick={clearSettings} className="bg-red-500 text-white px-3 py-1 text-sm rounded hover:bg-red-600">
-              Clear All
-            </button>
+    <SidebarProvider>
+      <AppSidebar
+        chats={chats}
+        currentChatId={currentChatId}
+        onNewChat={createNewChat}
+        onSelectChat={switchChat}
+        onDeleteChat={deleteChatById}
+      />
+      <SidebarInset>
+        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+          <div className="flex items-center gap-2 px-4">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem className="hidden md:block">
+                  <BreadcrumbLink href="#">
+                    AI Chat
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden md:block" />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Chat' : 'No Chat'}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+             <div className="ml-auto flex items-center space-x-2">
+               <button onClick={clearSettings} className="bg-red-500 text-white px-3 py-1 text-sm rounded hover:bg-red-600">
+                 Clear All
+               </button>
+             </div>
           </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4">
-          {currentChatMessages.length === 0 ? (
-            <div className="text-center text-gray-500 mt-8">
-              {currentChatId ? 'Start a conversation!' : 'Select or create a chat to begin.'}
-            </div>
-          ) : (
-            currentChatMessages.map((msg, i) => (
-              <Message key={`${currentChatId}-${i}`} message={msg} />
-            ))
-          )}
-        </div>
-
-        <div className="p-4 border-t border-gray-200 bg-white">
-          <div className="flex items-center space-x-2">
-            <ChatInput onSend={handleSend} status={currentChatStatus} inputValue={inputValue} setInputValue={setInputValue} />
-            {(currentChatStatus === 'submitted' || currentChatStatus === 'streaming') && (
-              <button
-                onClick={stopGeneration}
-                className="bg-red-500 text-white px-3 py-2 rounded text-sm hover:bg-red-600"
-              >
-                Stop
-              </button>
-            )}
+        </header>
+         <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+          <Conversation>
+            <ConversationContent>
+              {currentChatMessages.length === 0 ? (
+                <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-sm">No messages yet</h3>
+                    <p className="text-muted-foreground text-sm">Start a conversation to see messages here</p>
+                  </div>
+                </div>
+              ) : (
+                currentChatMessages.map((msg, i) => {
+                  const uiMessage = toUIMessage(msg);
+                  return (
+                    <Branch key={`${currentChatId}-${i}`}>
+                      <BranchMessages>
+                        <Message from={msg.role}>
+                          <MessageContent>
+                            <Response>{uiMessage.content}</Response>
+                          </MessageContent>
+                          <MessageAvatar
+                            name={msg.role === 'user' ? 'You' : 'AI'}
+                            src={msg.role === 'user'
+                              ? 'https://github.com/haydenbleasel.png'
+                              : 'https://github.com/openai.png'
+                            }
+                          />
+                        </Message>
+                      </BranchMessages>
+                    </Branch>
+                  );
+                })
+              )}
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
+            <PromptInput onSubmit={handleSend}>
+              <PromptInputBody>
+                <PromptInputTextarea />
+              </PromptInputBody>
+              <PromptInputFooter>
+                <PromptInputTools>
+                  <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
+                    <PromptInputModelSelectTrigger>
+                      <PromptInputModelSelectValue />
+                    </PromptInputModelSelectTrigger>
+                    <PromptInputModelSelectContent>
+                      {MODELS.map((model) => (
+                        <PromptInputModelSelectItem
+                          key={model.id}
+                          value={model.id}
+                        >
+                          {model.name}
+                        </PromptInputModelSelectItem>
+                      ))}
+                    </PromptInputModelSelectContent>
+                  </PromptInputModelSelect>
+                </PromptInputTools>
+                <PromptInputSubmit status={currentChatStatus} />
+              </PromptInputFooter>
+            </PromptInput>
           </div>
-        </div>
-      </div>
-    </div>
+        </SidebarInset>
+    </SidebarProvider>
   );
 }
