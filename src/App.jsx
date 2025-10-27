@@ -419,10 +419,10 @@ export default function App() {
                          return (
                            <Branch key={`${currentChatId}-${i}`}>
                              <BranchMessages>
-                                <Message from={msg.role}>
-                                  <MessageContent>
-                                    <Response>{uiMessage.content}</Response>
-                                  </MessageContent>
+                                 <Message from={msg.role}>
+                                   <MessageContent variant="flat">
+                                     <Response>{uiMessage.content}</Response>
+                                   </MessageContent>
                                   {msg.role === 'assistant' && (
                                     <MessageAvatar
                                       name="AI"
