@@ -1,7 +1,8 @@
   import { useState, useEffect, useRef } from 'react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
-
+import { ThemeProvider } from './contexts/ThemeProvider.jsx';
+import { ThemeSwitcher } from './components/settings/ThemeSwitcher.jsx';
 
 import { generateResponse } from './services/ai/client.js';
 import {
@@ -365,7 +366,8 @@ export default function App() {
   }
 
   return (
-    <SidebarProvider>
+    <ThemeProvider>
+      <SidebarProvider>
       <AppSidebar
         chats={chats}
         currentChatId={currentChatId}
@@ -391,11 +393,12 @@ export default function App() {
                  </BreadcrumbItem>
                </BreadcrumbList>
              </Breadcrumb>
-              <div className="ml-auto flex items-center space-x-2">
-                <button onClick={clearSettings} className="bg-red-500 text-white px-3 py-1 text-sm rounded hover:bg-red-600">
-                  Clear All
-                </button>
-              </div>
+               <div className="ml-auto flex items-center space-x-2">
+                 <ThemeSwitcher />
+                 <button onClick={clearSettings} className="bg-red-500 text-white px-3 py-1 text-sm rounded hover:bg-red-600">
+                   Clear All
+                 </button>
+               </div>
            </div>
          </header>
            <div className="flex-1 overflow-hidden">
@@ -465,7 +468,8 @@ export default function App() {
                </div>
              </div>
            </div>
-         </SidebarInset>
-    </SidebarProvider>
+          </SidebarInset>
+      </SidebarProvider>
+    </ThemeProvider>
   );
 }
