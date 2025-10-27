@@ -35,6 +35,14 @@ NEVER run pnpm build or pnpm run dev. the user will be responsible for building.
 - **Tailwind CSS**: Utility-first CSS framework for styling
 - **Vite**: Fast build tool and development server
 
+### Theme System
+- **Theme Definitions**: 15 themes in `src/utils/themes.js` with comprehensive color schemes for backgrounds, text, borders, syntax highlighting, markdown, and diffs
+- **State Management**: `ThemeProvider` in `src/contexts/ThemeProvider.jsx` manages theme state with persistence via `useStorage` hook
+- **Dynamic Styling**: CSS variables applied to `document.documentElement` for real-time theme switching
+- **Theme Switcher**: Dropdown component in `src/components/settings/ThemeSwitcher.jsx` allows theme selection with current theme highlighted
+- **Integration**: `App.jsx` wraps app with `ThemeProvider` and includes `ThemeSwitcher` in header
+- **Persistence**: Theme choice saved to Chrome storage and restored on load; supports light/dark modes per theme
+
 ### Multi-Chat Architecture
 Chats are stored as objects keyed by chat ID in `chatsData` state, each containing:
 - `metadata`: Chat info (id, title, timestamps, message count, last message)
