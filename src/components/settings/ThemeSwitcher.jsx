@@ -20,7 +20,7 @@ export function ThemeSwitcher() {
           {THEMES[theme]?.name || 'Theme'}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
+      <DropdownMenuContent align="end" className="w-48 max-h-64 overflow-y-auto">
         {Object.entries(THEMES).map(([key, themeData]) => (
           <DropdownMenuItem
             key={key}
