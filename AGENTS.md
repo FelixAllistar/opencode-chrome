@@ -36,7 +36,8 @@ NEVER run pnpm build or pnpm run dev. the user will be responsible for building.
 - **Vite**: Fast build tool and development server
 
 ### Theme System
-- **Theme Definitions**: 15 themes in `src/utils/themes.js` with comprehensive color schemes for backgrounds, text, borders, syntax highlighting, markdown, and diffs
+- **Theme Definitions**: 24 themes with comprehensive color schemes for backgrounds, text, borders, syntax highlighting, markdown, and diffs. Themes are defined in `src/utils/themes.js` (main export) and organized in individual files under `src/utils/themes/` for maintainability
+- **Color Mapping**: `THEME_VARIABLES` in `src/utils/themes.js` maps theme color keys to CSS custom properties used by Tailwind classes (--primary → accent colors for buttons, --card → backgroundElement for cards, etc.)
 - **State Management**: `ThemeProvider` in `src/contexts/ThemeProvider.jsx` manages theme state with persistence via `useStorage` hook
 - **Dynamic Styling**: CSS variables applied to `document.documentElement` for real-time theme switching
 - **Theme Switcher**: Dropdown component in `src/components/settings/ThemeSwitcher.jsx` allows theme selection with current theme highlighted
