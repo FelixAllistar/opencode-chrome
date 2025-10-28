@@ -53,10 +53,6 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <Button onClick={onNewChat} className="w-full justify-start">
-          <Plus className="mr-2 h-4 w-4" />
-          New Chat
-        </Button>
       </SidebarHeader>
       <SidebarContent>
         <div className="space-y-1 p-2">
@@ -70,14 +66,22 @@ export function AppSidebar({
                 key={chat.id}
                 className={`group relative p-3 rounded-lg cursor-pointer transition-colors ${
                   chat.id === currentChatId
-                    ? 'bg-accent border'
-                    : 'hover:bg-accent/50'
+                    ? 'bg-sidebar-accent border border-sidebar-border'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-800'
                 }`}
-                onClick={() => onSelectChat(chat.id)}
+                onClick={() => {
+                  onSelectChat(chat.id);
+                  setTimeout(() => {
+                    const toggleButton = document.querySelector('[data-sidebar="trigger"]');
+                    if (toggleButton) {
+                      toggleButton.click();
+                    }
+                  }, 100);
+                }}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium truncate">
+                    <h3 className="text-sm font-medium truncate text-sidebar-foreground">
                       {chat.title}
                     </h3>
                     <div className="flex items-center space-x-2 mt-1">
@@ -91,7 +95,7 @@ export function AppSidebar({
                       )}
                     </div>
                     {chat.lastMessage && (
-                      <p className="text-xs text-muted-foreground mt-1 truncate">
+                      <p className="text-xs mt-1 truncate text-muted-foreground">
                         {chat.lastMessage}
                       </p>
                     )}

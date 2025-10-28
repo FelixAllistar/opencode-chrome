@@ -93,7 +93,7 @@ export const THEME_VARIABLES = {
   // Input colors
   '--input': 'backgroundElement',
 
-  // Sidebar colors (improved hierarchy: sidebar darker, accents lighter for better contrast)
+  // Sidebar colors
   '--sidebar': 'background',
   '--sidebar-foreground': 'text',
   '--sidebar-primary': 'primary',
@@ -102,6 +102,9 @@ export const THEME_VARIABLES = {
   '--sidebar-accent-foreground': 'text',
   '--sidebar-border': 'border',
   '--sidebar-ring': 'borderActive',
+
+// Custom card text color
+  '--card-text': '#1a1a1a',
 
   // Chart colors (using accent colors)
   '--chart-1': 'primary',
