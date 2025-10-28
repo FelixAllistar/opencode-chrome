@@ -1,4 +1,5 @@
   import { useState, useEffect, useRef } from 'react';
+import { Plus, Settings } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
@@ -19,6 +20,7 @@ import {
   SidebarProvider,
   SidebarInset,
   SidebarTrigger,
+  useSidebar,
 } from './components/ui/sidebar.jsx';
 import {
   Breadcrumb,
@@ -29,6 +31,7 @@ import {
   BreadcrumbSeparator,
 } from './components/ui/breadcrumb.jsx';
 import { Separator } from './components/ui/separator.jsx';
+import { Button } from './components/ui/button.jsx';
 
 import { Response } from './components/ai-elements/response.tsx';
 import {
@@ -69,6 +72,7 @@ export default function App() {
   const [selectedModelId, setSelectedModelId] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
 
 
@@ -82,6 +86,18 @@ export default function App() {
   const currentChatStatus = chatsData[currentChatId]?.status || 'ready';
 
 
+
+  // Close settings dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (settingsOpen && !event.target.closest('.relative')) {
+        setSettingsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [settingsOpen]);
 
   // Load chats and current chat on mount
   useEffect(() => {
@@ -380,6 +396,10 @@ export default function App() {
            <div className="flex items-center gap-2 px-4">
              <SidebarTrigger className="-ml-1" />
              <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+             <Button onClick={createNewChat} variant="secondary" size="sm" className="h-8 w-8 p-0">
+               <Plus className="h-4 w-4" />
+             </Button>
+             <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
               <Breadcrumb>
                 <BreadcrumbList>
                   <BreadcrumbItem className="hidden md:block">
@@ -394,10 +414,35 @@ export default function App() {
                 </BreadcrumbList>
               </Breadcrumb>
                <div className="ml-auto flex items-center space-x-2">
-                 <ThemeSwitcher />
-                 <button onClick={clearSettings} className="bg-red-500 text-white px-3 py-1 text-sm rounded hover:bg-red-600">
-                   Clear All
-                 </button>
+                 <div className="relative">
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => setSettingsOpen(!settingsOpen)}
+                     className="h-8 w-8 p-0"
+                   >
+                     <Settings className="h-4 w-4" />
+                   </Button>
+                   {settingsOpen && (
+                     <div className="absolute right-0 top-full mt-1 w-48 bg-popover border rounded-md shadow-lg z-50">
+                       <div className="p-2 space-y-1">
+                         <div className="px-2 py-1 text-sm font-medium">Settings</div>
+                         <div className="border-t pt-1">
+                           <div className="px-2 py-1 text-xs text-muted-foreground">Theme</div>
+                           <div className="p-2">
+                             <ThemeSwitcher />
+                           </div>
+                         </div>
+                         <button
+                           onClick={clearSettings}
+                           className="w-full text-left px-2 py-1 text-sm hover:bg-accent rounded"
+                         >
+                           Clear All Chats
+                         </button>
+                       </div>
+                     </div>
+                   )}
+                 </div>
                </div>
            </div>
          </header>

@@ -18,7 +18,6 @@ export function ThemeProvider({ children }) {
 
     const root = document.documentElement;
 
-    // Apply theme variables
     Object.entries(THEME_VARIABLES).forEach(([cssVar, themeKey]) => {
       const color = themeData[themeKey]?.[darkMode ? 'dark' : 'light'];
       if (color) {
@@ -26,7 +25,9 @@ export function ThemeProvider({ children }) {
       }
     });
 
-    // Apply theme class to root
+    root.style.setProperty('--card-text', '#1a1a1a');
+    root.style.setProperty('--card-text-muted', '#4a4a4a');
+
     root.classList.remove('light', 'dark');
     root.classList.add(darkMode ? 'dark' : 'light');
   };
