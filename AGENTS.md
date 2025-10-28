@@ -36,8 +36,9 @@ NEVER run pnpm build or pnpm run dev. the user will be responsible for building.
 - **Vite**: Fast build tool and development server
 
 ### Theme System
-- **Theme Definitions**: 24 themes with comprehensive color schemes for backgrounds, text, borders, syntax highlighting, markdown, and diffs. Themes are defined in `src/utils/themes.js` (main export) and organized in individual files under `src/utils/themes/` for maintainability
-- **Color Mapping**: `THEME_VARIABLES` in `src/utils/themes.js` maps theme color keys to CSS custom properties used by Tailwind classes (--primary → accent colors for buttons, --card → backgroundElement for cards, etc.)
+- **Theme Definitions**: 24 themes with comprehensive color schemes for backgrounds, text, borders, syntax highlighting, markdown, and diffs. Each theme is maintained in its own file under `src/utils/themes/` (e.g., `zenburn.js`, `dracula.js`) for better organization and maintainability
+- **Main Export**: `src/utils/themes.js` imports all individual theme files and exports them as a `THEMES` object
+- **Color Mapping**: `THEME_VARIABLES` in `src/utils/themes.js` maps theme color keys to CSS custom properties used by Tailwind classes (--primary → accent colors for buttons, --card → backgroundElement for cards, --popover → backgroundElement, --muted → backgroundPanel, --input → backgroundElement, etc.)
 - **State Management**: `ThemeProvider` in `src/contexts/ThemeProvider.jsx` manages theme state with persistence via `useStorage` hook
 - **Dynamic Styling**: CSS variables applied to `document.documentElement` for real-time theme switching
 - **Theme Switcher**: Dropdown component in `src/components/settings/ThemeSwitcher.jsx` allows theme selection with current theme highlighted
