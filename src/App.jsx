@@ -449,66 +449,67 @@ export default function App() {
                </div>
            </div>
          </header>
-           <div className="flex-1 overflow-hidden">
-             <div className="h-full flex flex-col">
-                 <div className="flex-1 p-4 pt-0 pb-48">
-                  <Conversation style={{ height: '500px' }}>
-                    <ConversationContent>
-                      {currentChatMessages.length === 0 ? (
-                        <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
-                          <div className="space-y-1">
-                            <h3 className="font-medium text-sm">No messages yet</h3>
-                            <p className="text-muted-foreground text-sm">Start a conversation to see messages here</p>
-                          </div>
+           <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Conversation area - takes remaining space */}
+              <div className="flex-1 overflow-hidden">
+                <Conversation className="h-full">
+                  <ConversationContent className="p-4">
+                    {currentChatMessages.length === 0 ? (
+                      <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
+                        <div className="space-y-1">
+                          <h3 className="font-medium text-sm">No messages yet</h3>
+                          <p className="text-muted-foreground text-sm">Start a conversation to see messages here</p>
                         </div>
-                      ) : (
-                        currentChatMessages.map((msg, i) => {
-                          const uiMessage = toUIMessage(msg);
-                          return (
-                            <Branch key={`${currentChatId}-${i}`}>
-                              <BranchMessages>
-                                   <Message from={msg.role}>
-                                     <MessageContent variant="flat">
-                                       <Response>{uiMessage.content}</Response>
-                                     </MessageContent>
-                                  </Message>
-                              </BranchMessages>
-                            </Branch>
-                          );
-                        })
-                      )}
-                    </ConversationContent>
-                    <ConversationScrollButton />
-                  </Conversation>
-                </div>
-                <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-4 z-10">
-                 <PromptInput onSubmit={handleSend}>
-                   <PromptInputBody>
-                     <PromptInputTextarea />
-                   </PromptInputBody>
-                   <PromptInputFooter>
-                     <PromptInputTools>
-                       <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
-                         <PromptInputModelSelectTrigger>
-                           <PromptInputModelSelectValue />
-                         </PromptInputModelSelectTrigger>
-                         <PromptInputModelSelectContent>
-                           {MODELS.map((model) => (
-                             <PromptInputModelSelectItem
-                               key={model.id}
-                               value={model.id}
-                             >
-                               {model.name}
-                             </PromptInputModelSelectItem>
-                           ))}
-                         </PromptInputModelSelectContent>
-                       </PromptInputModelSelect>
-                     </PromptInputTools>
-                     <PromptInputSubmit status={currentChatStatus} />
-                   </PromptInputFooter>
-                 </PromptInput>
-               </div>
-             </div>
+                      </div>
+                    ) : (
+                      currentChatMessages.map((msg, i) => {
+                        const uiMessage = toUIMessage(msg);
+                        return (
+                          <Branch key={`${currentChatId}-${i}`}>
+                            <BranchMessages>
+                                 <Message from={msg.role}>
+                                   <MessageContent variant="flat">
+                                     <Response>{uiMessage.content}</Response>
+                                   </MessageContent>
+                                </Message>
+                            </BranchMessages>
+                          </Branch>
+                        );
+                      })
+                    )}
+                  </ConversationContent>
+                  <ConversationScrollButton />
+                </Conversation>
+              </div>
+
+              {/* Prompt input - fixed at bottom */}
+              <div className="border-t bg-background p-4">
+                <PromptInput onSubmit={handleSend}>
+                  <PromptInputBody>
+                    <PromptInputTextarea />
+                  </PromptInputBody>
+                  <PromptInputFooter>
+                    <PromptInputTools>
+                      <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
+                        <PromptInputModelSelectTrigger>
+                          <PromptInputModelSelectValue />
+                        </PromptInputModelSelectTrigger>
+                        <PromptInputModelSelectContent>
+                          {MODELS.map((model) => (
+                            <PromptInputModelSelectItem
+                              key={model.id}
+                              value={model.id}
+                            >
+                              {model.name}
+                            </PromptInputModelSelectItem>
+                          ))}
+                        </PromptInputModelSelectContent>
+                      </PromptInputModelSelect>
+                    </PromptInputTools>
+                    <PromptInputSubmit status={currentChatStatus} />
+                  </PromptInputFooter>
+                </PromptInput>
+              </div>
            </div>
           </SidebarInset>
       </SidebarProvider>
