@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Helium AI Sidebar",
+  "name": "OpenSidebar",
   "version": "1.0",
   "description": "AI extension sidebar using OpenCode SDK",
   "permissions": ["sidePanel", "storage", "activeTab"],

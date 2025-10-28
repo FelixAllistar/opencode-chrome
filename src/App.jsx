@@ -380,19 +380,19 @@ export default function App() {
            <div className="flex items-center gap-2 px-4">
              <SidebarTrigger className="-ml-1" />
              <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-             <Breadcrumb>
-               <BreadcrumbList>
-                 <BreadcrumbItem className="hidden md:block">
-                   <BreadcrumbLink href="#">
-                     AI Chat
-                   </BreadcrumbLink>
-                 </BreadcrumbItem>
-                 <BreadcrumbSeparator className="hidden md:block" />
-                 <BreadcrumbItem>
-                   <BreadcrumbPage>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Chat' : 'No Chat'}</BreadcrumbPage>
-                 </BreadcrumbItem>
-               </BreadcrumbList>
-             </Breadcrumb>
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem className="hidden md:block">
+                    <BreadcrumbLink href="#">
+                      AI Chat
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator className="hidden md:block" />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Chat' : 'No Chat'}</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
                <div className="ml-auto flex items-center space-x-2">
                  <ThemeSwitcher />
                  <button onClick={clearSettings} className="bg-red-500 text-white px-3 py-1 text-sm rounded hover:bg-red-600">
