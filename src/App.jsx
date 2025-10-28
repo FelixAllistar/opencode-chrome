@@ -392,37 +392,39 @@ export default function App() {
         onDeleteChat={deleteChatById}
       />
        <SidebarInset className="h-screen flex flex-col">
-         <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-           <div className="flex items-center gap-2 px-4">
-             <SidebarTrigger className="-ml-1" />
-             <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-             <Button onClick={createNewChat} variant="secondary" size="sm" className="h-8 w-8 p-0">
-               <Plus className="h-4 w-4" />
-             </Button>
-             <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-              <Breadcrumb>
-                <BreadcrumbList>
-                  <BreadcrumbItem className="hidden md:block">
-                    <BreadcrumbLink href="#">
-                      AI Chat
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  <BreadcrumbSeparator className="hidden md:block" />
-                  <BreadcrumbItem>
-                    <BreadcrumbPage>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Chat' : 'No Chat'}</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </BreadcrumbList>
-              </Breadcrumb>
-               <div className="ml-auto flex items-center space-x-2">
+          <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+            <div className="flex items-center justify-between px-4 w-full">
+              <div className="flex items-center gap-2">
+                <SidebarTrigger className="-ml-1" />
+                <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+                <Button onClick={createNewChat} variant="ghost" size="default" className="h-12 w-12 p-0">
+                  <Plus className="h-8 w-8" />
+                </Button>
+                <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+                 <Breadcrumb>
+                   <BreadcrumbList>
+                     <BreadcrumbItem className="hidden md:block">
+                       <BreadcrumbLink href="#">
+                         AI Chat
+                       </BreadcrumbLink>
+                     </BreadcrumbItem>
+                     <BreadcrumbSeparator className="hidden md:block" />
+                     <BreadcrumbItem>
+                       <BreadcrumbPage>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Chat' : 'No Chat'}</BreadcrumbPage>
+                     </BreadcrumbItem>
+                   </BreadcrumbList>
+                 </Breadcrumb>
+              </div>
+              <div className="flex items-center space-x-2">
                  <div className="relative">
-                   <Button
-                     variant="ghost"
-                     size="sm"
-                     onClick={() => setSettingsOpen(!settingsOpen)}
-                     className="h-8 w-8 p-0"
-                   >
-                     <Settings className="h-4 w-4" />
-                   </Button>
+                    <Button
+                      variant="ghost"
+                      size="default"
+                      onClick={() => setSettingsOpen(!settingsOpen)}
+                      className="h-12 w-12 p-0"
+                    >
+                      <Settings className="h-8 w-8" />
+                    </Button>
                    {settingsOpen && (
                      <div className="absolute right-0 top-full mt-1 w-48 bg-popover border rounded-md shadow-lg z-50">
                        <div className="p-2 space-y-1">
