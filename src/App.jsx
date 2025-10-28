@@ -1,4 +1,4 @@
-  import { useState, useEffect, useRef } from 'react';
+  import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Settings } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
@@ -62,6 +62,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from './components/ai-elements/prompt-input.tsx';
+
 
 
 export default function App() {
@@ -450,36 +451,36 @@ export default function App() {
          </header>
            <div className="flex-1 overflow-hidden">
              <div className="h-full flex flex-col">
-                <div className="flex-1 overflow-auto p-4 pt-0 pb-48">
-                 <Conversation>
-                   <ConversationContent>
-                     {currentChatMessages.length === 0 ? (
-                       <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
-                         <div className="space-y-1">
-                           <h3 className="font-medium text-sm">No messages yet</h3>
-                           <p className="text-muted-foreground text-sm">Start a conversation to see messages here</p>
-                         </div>
-                       </div>
-                     ) : (
-                       currentChatMessages.map((msg, i) => {
-                         const uiMessage = toUIMessage(msg);
-                         return (
-                           <Branch key={`${currentChatId}-${i}`}>
-                             <BranchMessages>
-                                  <Message from={msg.role}>
-                                    <MessageContent variant="flat">
-                                      <Response>{uiMessage.content}</Response>
-                                    </MessageContent>
-                                 </Message>
-                             </BranchMessages>
-                           </Branch>
-                         );
-                       })
-                     )}
-                   </ConversationContent>
-                   <ConversationScrollButton />
-                 </Conversation>
-               </div>
+                 <div className="flex-1 p-4 pt-0 pb-48">
+                  <Conversation style={{ height: '500px' }}>
+                    <ConversationContent>
+                      {currentChatMessages.length === 0 ? (
+                        <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
+                          <div className="space-y-1">
+                            <h3 className="font-medium text-sm">No messages yet</h3>
+                            <p className="text-muted-foreground text-sm">Start a conversation to see messages here</p>
+                          </div>
+                        </div>
+                      ) : (
+                        currentChatMessages.map((msg, i) => {
+                          const uiMessage = toUIMessage(msg);
+                          return (
+                            <Branch key={`${currentChatId}-${i}`}>
+                              <BranchMessages>
+                                   <Message from={msg.role}>
+                                     <MessageContent variant="flat">
+                                       <Response>{uiMessage.content}</Response>
+                                     </MessageContent>
+                                  </Message>
+                              </BranchMessages>
+                            </Branch>
+                          );
+                        })
+                      )}
+                    </ConversationContent>
+                    <ConversationScrollButton />
+                  </Conversation>
+                </div>
                 <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-4 z-10">
                  <PromptInput onSubmit={handleSend}>
                    <PromptInputBody>
