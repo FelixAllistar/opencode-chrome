@@ -69,9 +69,10 @@ export default function App() {
   const [chatsData, setChatsData] = useState({});
   const [currentChatId, setCurrentChatIdState] = useState(null);
   const [keyInput, setKeyInput] = useState('');
-  const [apiKey, setApiKey] = useStorage('apiKey', '');
-  const [selectedModelId, setSelectedModelId] = useStorage('selectedModelId', MODELS[0].id);
+  const [apiKey, setApiKey, isApiKeyLoading] = useStorage('apiKey', '');
+  const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
+  const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -140,6 +141,7 @@ export default function App() {
        }
 
        setChatsData(newChatsData);
+      setIsInitialDataLoading(false);
     };
 
     loadInitialData();
@@ -362,6 +364,14 @@ export default function App() {
       });
     }
   };
+
+  if (isApiKeyLoading || isModelLoading || isInitialDataLoading) {
+    return (
+      <div className="flex h-screen bg-gray-100 items-center justify-center">
+        <div className="text-sm text-gray-600">Loading...</div>
+      </div>
+    );
+  }
 
   if (!apiKey) {
     return (
