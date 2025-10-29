@@ -12,7 +12,7 @@
 - [About](https://ui.shadcn.com/docs/about): Credits and project information.
 
 ## Installation
-
+0
 - [Next.js](https://ui.shadcn.com/docs/installation/next): Install shadcn/ui in a Next.js project.
 - [Vite](https://ui.shadcn.com/docs/installation/vite): Install shadcn/ui in a Vite project.
 - [Remix](https://ui.shadcn.com/docs/installation/remix): Install shadcn/ui in a Remix project.
