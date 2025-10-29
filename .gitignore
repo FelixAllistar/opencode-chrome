@@ -91,3 +91,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# opencode folder
+opencode/
