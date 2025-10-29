@@ -48,6 +48,7 @@ import {
   MessageAvatar,
   MessageContent,
 } from './components/ai-elements/message.tsx';
+import { THEMES, THEME_VARIABLES } from './utils/themes.js';
 import { toUIMessage } from './utils/messageUtils.js';
 import {
   PromptInput,
@@ -73,10 +74,37 @@ export default function App() {
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
+
+  // Load theme immediately for loading screen
+  const [theme, setTheme] = useStorage('theme', 'zenburn');
+  const [isDark, setIsDark] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Apply theme immediately for loading screen
+  useEffect(() => {
+    const applyTheme = (themeName, darkMode) => {
+      const themeData = THEMES[themeName];
+      if (!themeData) return;
 
+      const root = document.documentElement;
+
+      Object.entries(THEME_VARIABLES).forEach(([cssVar, themeKey]) => {
+        const color = themeData[themeKey]?.[darkMode ? 'dark' : 'light'];
+        if (color) {
+          root.style.setProperty(cssVar, color);
+        }
+      });
+
+      root.style.setProperty('--card-text', '#1a1a1a');
+      root.style.setProperty('--card-text-muted', '#4a4a4a');
+
+      root.classList.remove('light', 'dark');
+      root.classList.add(darkMode ? 'dark' : 'light');
+    };
+
+    applyTheme(theme, isDark);
+  }, [theme, isDark]);
 
   // Ref to hold the latest chatsData to solve stale state in async callbacks
   const chatsDataRef = useRef();
@@ -367,8 +395,7 @@ export default function App() {
 
   if (isApiKeyLoading || isModelLoading || isInitialDataLoading) {
     return (
-      <div className="flex h-screen bg-gray-100 items-center justify-center">
-        <div className="text-sm text-gray-600">Loading...</div>
+      <div className="flex h-screen bg-background items-center justify-center">
       </div>
     );
   }
