@@ -140,7 +140,9 @@ export default function App() {
           const messages = chatsData[recentChatId].messages;
           const lastAiMessage = [...messages].reverse().find(msg => msg.role === 'assistant');
 
-          if (lastAiMessage) {
+          // Skip if the last AI message already has an error
+          const hasError = lastAiMessage?.parts?.some(part => part.type === 'tool-result' && part.error);
+          if (lastAiMessage && !hasError) {
             flushSync(() => setChatsData(prev => ({
               ...prev,
               [recentChatId]: {
@@ -461,7 +463,7 @@ export default function App() {
           ...prev,
           [chatId]: {
             ...prev[chatId],
-            status: 'error',
+            status: 'ready', // Allow sending again after error
             messages: prev[chatId].messages.map(msg =>
               msg.id === aiMessageId
                 ? {
@@ -508,7 +510,7 @@ export default function App() {
         ...prev,
         [chatId]: {
           ...prev[chatId],
-          status: 'error',
+          status: 'ready', // Allow sending again after error
           messages: prev[chatId].messages.map(msg =>
             msg.id === aiMessageId
               ? {
