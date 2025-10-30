@@ -41,7 +41,7 @@ These are the available models through OpenCode:
 - **GPT models** (`gpt-5`, `gpt-5-codex`) - Good for general purpose and coding
 - **Claude models** (`claude-sonnet-4-5`, `claude-opus-4-1`) - Balanced performance and reasoning
 - **Code models** (`qwen3-coder`, `grok-code`) - Specialized for programming
-- **OpenCode models** (`code-supernova`, `big-pickle`) - Advanced code generation
+- **OpenCode models** (`big-pickle`) - Advanced code generation
 
 Pick whichever works best for your needs. You can switch between models per conversation.
 
