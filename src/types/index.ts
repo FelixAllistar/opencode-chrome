@@ -1,10 +1,3 @@
-// Legacy interface - kept for backward compatibility
-export interface LegacyMessage {
-  text: string;
-  user: boolean;
-  timestamp?: Date;
-}
-
 // Current message structure used throughout the app
 export interface MessagePart {
   type: 'text' | 'tool-call' | 'tool-result' | 'reasoning' | string;

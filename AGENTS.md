@@ -51,12 +51,16 @@ Chats are stored as objects keyed by chat ID in `chatsData` state, each containi
 - `messages`: Array of message objects with role, parts (text, tool-call, tool-result, reasoning), and status
 - `status`: Current chat state ('ready', 'submitted', 'streaming', 'error')
 
-Messages now support rich content with multiple part types:
-- **Text parts**: Standard text content rendered with markdown support via Streamdown
-- **Tool-call parts**: Display tool invocations with function name, arguments, and unique toolCallId for correlation
-- **Tool-result parts**: Show tool execution results with input/output, error handling, and matching toolCallId
-- **Reasoning parts**: Internal AI reasoning steps that can be collapsed/expanded with streaming indicators
-- **Legacy tool parts**: Combined tool call/result information (deprecated but still supported for backward compatibility)
+### Message Parts System
+
+Messages use a `parts` array for rich content. Each part has a `type` and content:
+
+- **`text`**: Markdown/LaTeX content rendered via `Response` component
+- **`tool-call`**: Tool invocation with `toolName`, `args`, and `toolCallId` for correlation
+- **`tool-result`**: Tool execution result with `result`, `error`, and matching `toolCallId`
+- **`reasoning`**: AI's internal thinking, displayed in collapsible `Reasoning` component
+
+Parts stream incrementally during generation, enabling real-time UI updates.
 
 Messages are loaded on-demand when switching chats. Streaming responses update the specific chat's messages in real-time with incremental part updates. Persistence uses Chrome local storage with separate keys for metadata and messages.
 

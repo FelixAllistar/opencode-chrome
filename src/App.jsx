@@ -21,7 +21,6 @@ import {
   SidebarProvider,
   SidebarInset,
   SidebarTrigger,
-  useSidebar,
 } from './components/ui/sidebar.jsx';
 import {
   Breadcrumb,
@@ -52,7 +51,6 @@ import {
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from './components/ai-elements/tool.tsx';
 import { Reasoning, ReasoningTrigger, ReasoningContent } from './components/ai-elements/reasoning.tsx';
 import { THEMES, THEME_VARIABLES } from './utils/themes.js';
-import { toUIMessage } from './utils/messageUtils.js';
 import {
   PromptInput,
   PromptInputBody,
