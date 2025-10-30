@@ -8,14 +8,16 @@
  * @returns {Object} UIMessage compatible object
  */
 export function toUIMessage(internalMsg) {
+  // Preserve all parts for AI Elements to handle, including tool calls and results
   return {
     id: internalMsg.id,
     role: internalMsg.role,
+    parts: internalMsg.parts || [],
+    // For backward compatibility, also provide content string
     content: internalMsg.parts
       ?.filter(part => part.type === 'text')
       ?.map(part => part.text)
       ?.join('') || '',
-    // Add any additional UIMessage fields as needed
   };
 }
 
@@ -51,4 +53,72 @@ export function toUIMessages(internalMessages) {
  */
 export function fromUIMessages(uiMessages, status = 'ready') {
   return uiMessages.map(uiMsg => fromUIMessage(uiMsg, status));
+}
+
+/**
+ * Create a tool call part
+ * @param {string} toolName - Name of the tool being called
+ * @param {Object} toolInput - Input parameters for the tool
+ * @param {string} toolCallId - Unique identifier for this tool call
+ * @returns {Object} Tool call part object
+ */
+export function createToolCallPart(toolName, toolInput, toolCallId) {
+  return {
+    type: 'tool-call',
+    toolCallId,
+    toolName,
+    args: toolInput,
+  };
+}
+
+/**
+ * Create a tool result part
+ * @param {string} toolCallId - Unique identifier for the tool call
+ * @param {any} result - Result from the tool execution
+ * @param {string} [error] - Optional error message if tool failed
+ * @returns {Object} Tool result part object
+ */
+export function createToolResultPart(toolCallId, result, error) {
+  return {
+    type: 'tool-result',
+    toolCallId,
+    result: error ? null : result,
+    error,
+  };
+}
+
+/**
+ * Check if a message contains tool calls
+ * @param {Object} message - Message object to check
+ * @returns {boolean} True if message contains tool calls
+ */
+export function hasToolCalls(message) {
+  return message.parts?.some(part => part.type === 'tool-call') || false;
+}
+
+/**
+ * Check if a message contains tool results
+ * @param {Object} message - Message object to check
+ * @returns {boolean} True if message contains tool results
+ */
+export function hasToolResults(message) {
+  return message.parts?.some(part => part.type === 'tool-result') || false;
+}
+
+/**
+ * Extract tool calls from a message
+ * @param {Object} message - Message object
+ * @returns {Array} Array of tool call parts
+ */
+export function getToolCalls(message) {
+  return message.parts?.filter(part => part.type === 'tool-call') || [];
+}
+
+/**
+ * Extract tool results from a message
+ * @param {Object} message - Message object
+ * @returns {Array} Array of tool result parts
+ */
+export function getToolResults(message) {
+  return message.parts?.filter(part => part.type === 'tool-result') || [];
 }

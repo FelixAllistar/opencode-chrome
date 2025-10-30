@@ -48,6 +48,7 @@ import {
   MessageAvatar,
   MessageContent,
 } from './components/ai-elements/message.tsx';
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from './components/ai-elements/tool.tsx';
 import { THEMES, THEME_VARIABLES } from './utils/themes.js';
 import { toUIMessage } from './utils/messageUtils.js';
 import {
@@ -274,12 +275,19 @@ export default function App() {
     }));
 
     try {
-      const result = await generateResponse(selectedModel.id, selectedModel.type, messagesToSend, apiKey);
+      // Enable tools by default
+      const result = await generateResponse(selectedModel.id, selectedModel.type, messagesToSend, apiKey, {
+        enableTools: true,
+        system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
+      });
 
       setChatsData(prev => ({
         ...prev,
         [chatId]: { ...prev[chatId], status: 'streaming' }
       }));
+
+      // Initialize AI message with empty parts array
+      let currentParts = [];
 
       for await (const part of result.textStream) {
         // Check if generation was stopped by looking at the ref
@@ -287,13 +295,55 @@ export default function App() {
           break;
         }
 
+        // Handle different part types from AI SDK
+        if (typeof part === 'string') {
+          // Simple text stream (backward compatibility for non-tool messages)
+          const lastPart = currentParts[currentParts.length - 1];
+          if (lastPart && lastPart.type === 'text') {
+            lastPart.text += part;
+          } else {
+            currentParts.push({ type: 'text', text: part });
+          }
+        } else if (part.type === 'text') {
+          // Structured text part (when tools are enabled)
+          const lastPart = currentParts[currentParts.length - 1];
+          if (lastPart && lastPart.type === 'text') {
+            lastPart.text += part.text;
+          } else {
+            currentParts.push({ type: 'text', text: part.text });
+          }
+        } else if (part.type === 'tool-call') {
+          // Add tool call part
+          currentParts.push({
+            type: 'tool-call',
+            toolCallId: part.toolCallId,
+            toolName: part.toolName,
+            args: part.args,
+          });
+        } else if (part.type === 'tool-result') {
+          // Add tool result part
+          currentParts.push({
+            type: 'tool-result',
+            toolCallId: part.toolCallId,
+            result: part.result,
+            error: part.error,
+          });
+        } else if (part.type === 'step-start') {
+          // Handle step start (optional)
+          continue;
+        } else if (part.type === 'step-finish') {
+          // Handle step finish (optional)
+          continue;
+        }
+
+        // Update state with all parts
         setChatsData(prev => ({
           ...prev,
           [chatId]: {
             ...prev[chatId],
             messages: prev[chatId].messages.map(msg =>
               msg.id === aiMessageId
-                ? { ...msg, parts: [{ type: 'text', text: msg.parts[0].text + part }], status: 'streaming' }
+                ? { ...msg, parts: [...currentParts], status: 'streaming' }
                 : msg
             )
           }
@@ -309,7 +359,7 @@ export default function App() {
           status: 'error',
           messages: prev[chatId].messages.map(msg =>
             msg.id === aiMessageId
-              ? { ...msg, status: 'error', parts: [{ type: 'text', text: 'Sorry, there was an error.' }] }
+              ? { ...msg, status: 'error', parts: [{ type: 'text', text: `Sorry, there was an error: ${error.message}` }] }
               : msg
           )
         }
@@ -359,6 +409,71 @@ export default function App() {
     setSelectedModelId(MODELS[0].id);
     setChatsData({});
     setCurrentChatIdState(null);
+  };
+
+  // Render mixed content message parts (text + tool calls/results)
+  const renderMessageParts = (message) => {
+    if (!message.parts || message.parts.length === 0) {
+      return <Response />;
+    }
+
+    return (
+      <div className="space-y-4">
+        {message.parts.map((part, index) => {
+          // Text part - use Response component for markdown rendering
+          if (part.type === 'text') {
+            return <Response key={`text-${index}`}>{part.text}</Response>;
+          }
+
+          // Tool call part - display tool call information
+          if (part.type === 'tool-call') {
+            return (
+              <Tool key={`tool-call-${part.toolCallId}-${index}`} defaultOpen>
+                <ToolHeader
+                  type={`tool-${part.toolName}`}
+                  state="input-available"
+                  title={`Calling ${part.toolName}`}
+                />
+                <ToolContent>
+                  <ToolInput input={part.args} />
+                </ToolContent>
+              </Tool>
+            );
+          }
+
+          // Tool result part - display tool execution result
+          if (part.type === 'tool-result') {
+            return (
+              <Tool key={`tool-result-${part.toolCallId}-${index}`} defaultOpen>
+                <ToolHeader
+                  type={`tool-${part.toolCallId}`}
+                  state={part.error ? "output-error" : "output-available"}
+                  title={`${part.error ? 'Error in' : 'Result from'} ${part.toolCallId}`}
+                />
+                <ToolContent>
+                  <ToolOutput
+                    output={part.result}
+                    errorText={part.error}
+                  />
+                </ToolContent>
+              </Tool>
+            );
+          }
+
+          // Unknown part type - render as raw JSON for debugging
+          return (
+            <div key={`unknown-${index}`} className="p-4 bg-muted/50 rounded-md">
+              <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">
+                Unknown Part Type: {part.type}
+              </h4>
+              <pre className="text-xs overflow-x-auto">
+                {JSON.stringify(part, null, 2)}
+              </pre>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   const stopGeneration = async () => {
@@ -500,13 +615,12 @@ export default function App() {
                       </div>
                     ) : (
                       currentChatMessages.map((msg, i) => {
-                        const uiMessage = toUIMessage(msg);
                         return (
                           <Branch key={`${currentChatId}-${i}`}>
                             <BranchMessages>
                                  <Message from={msg.role}>
                                    <MessageContent variant="flat">
-                                     <Response>{uiMessage.content}</Response>
+                                     {renderMessageParts(msg)}
                                    </MessageContent>
                                 </Message>
                             </BranchMessages>
