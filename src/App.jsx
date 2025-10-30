@@ -275,80 +275,140 @@ export default function App() {
     }));
 
     try {
+      console.log('🚀 Starting AI response generation...');
+
       // Enable tools by default
       const result = await generateResponse(selectedModel.id, selectedModel.type, messagesToSend, apiKey, {
         enableTools: true,
         system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
       });
 
+      console.log('📥 Got result from generateResponse:', result);
+      console.log('📥 Has textStream?', !!result.textStream);
+
       setChatsData(prev => ({
         ...prev,
         [chatId]: { ...prev[chatId], status: 'streaming' }
       }));
 
+      console.log('📊 Status set to streaming');
+
       // Initialize AI message with empty parts array
-      let currentParts = [];
+      let currentText = '';
 
-      for await (const part of result.textStream) {
-        // Check if generation was stopped by looking at the ref
-        if (chatsDataRef.current[chatId]?.status !== 'streaming') {
-          break;
+      // Stream the text response (this is the final AI response with tools already incorporated)
+      if (result.textStream) {
+        console.log('🔄 Starting to iterate over textStream...');
+        let streamCount = 0;
+
+        for await (const part of result.textStream) {
+          streamCount++;
+          console.log(`📝 Stream part ${streamCount}:`, part);
+
+          // Check if generation was stopped
+          if (chatsDataRef.current[chatId]?.status !== 'streaming') {
+            console.log('⏹️ Generation was stopped, breaking out of stream');
+            break;
+          }
+
+          // Handle text streaming
+          if (typeof part === 'string') {
+            currentText += part;
+            console.log(`📄 Added string text, current length: ${currentText.length}`);
+          } else if (part && part.type === 'text') {
+            currentText += part.text;
+            console.log(`📄 Added text part, current length: ${currentText.length}`);
+          }
+
+          // Update state with streaming text
+          setChatsData(prev => {
+            console.log('💾 Updating state with streaming text...');
+            return {
+              ...prev,
+              [chatId]: {
+                ...prev[chatId],
+                messages: prev[chatId].messages.map(msg =>
+                  msg.id === aiMessageId
+                    ? { ...msg, parts: [{ type: 'text', text: currentText }], status: 'streaming' }
+                    : msg
+                )
+              }
+            };
+          });
         }
 
-        // Handle different part types from AI SDK
-        if (typeof part === 'string') {
-          // Simple text stream (backward compatibility for non-tool messages)
-          const lastPart = currentParts[currentParts.length - 1];
-          if (lastPart && lastPart.type === 'text') {
-            lastPart.text += part;
-          } else {
-            currentParts.push({ type: 'text', text: part });
-          }
-        } else if (part.type === 'text') {
-          // Structured text part (when tools are enabled)
-          const lastPart = currentParts[currentParts.length - 1];
-          if (lastPart && lastPart.type === 'text') {
-            lastPart.text += part.text;
-          } else {
-            currentParts.push({ type: 'text', text: part.text });
-          }
-        } else if (part.type === 'tool-call') {
-          // Add tool call part
-          currentParts.push({
-            type: 'tool-call',
-            toolCallId: part.toolCallId,
-            toolName: part.toolName,
-            args: part.args,
-          });
-        } else if (part.type === 'tool-result') {
-          // Add tool result part
-          currentParts.push({
-            type: 'tool-result',
-            toolCallId: part.toolCallId,
-            result: part.result,
-            error: part.error,
-          });
-        } else if (part.type === 'step-start') {
-          // Handle step start (optional)
-          continue;
-        } else if (part.type === 'step-finish') {
-          // Handle step finish (optional)
-          continue;
-        }
-
-        // Update state with all parts
-        setChatsData(prev => ({
-          ...prev,
-          [chatId]: {
-            ...prev[chatId],
-            messages: prev[chatId].messages.map(msg =>
-              msg.id === aiMessageId
-                ? { ...msg, parts: [...currentParts], status: 'streaming' }
-                : msg
-            )
-          }
-        }));
+        console.log(`✅ Stream completed after ${streamCount} parts`);
+      } else {
+        console.log('❌ No textStream found in result!');
       }
+
+      // Get step data and final text from the result
+      const stepData = result.getStepData();
+      const finalText = result.getFinalText();
+
+      console.log('📋 Step data:', stepData);
+      console.log('📋 Final text:', finalText);
+
+      console.log('Step data from onStepFinish:', stepData);
+      console.log('Final text:', finalText);
+
+      // Build parts array from step data and final text using AI Elements format
+      const finalParts = [];
+
+      // Process each step to extract tool calls and results
+      for (const stepInfo of stepData) {
+        // Add tool calls from this step in AI Elements format
+        if (stepInfo.toolCalls && stepInfo.toolCalls.length > 0) {
+          for (const toolCall of stepInfo.toolCalls) {
+            finalParts.push({
+              type: 'tool-call',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              args: toolCall.args,
+              input: toolCall.args, // AI Elements expects 'input' property
+              state: 'input-available'
+            });
+          }
+        }
+
+        // Add tool results from this step in AI Elements format
+        if (stepInfo.toolResults && stepInfo.toolResults.length > 0) {
+          for (const toolResult of stepInfo.toolResults) {
+            finalParts.push({
+              type: 'tool-result',
+              toolCallId: toolResult.toolCallId,
+              result: toolResult.result,
+              output: toolResult.result, // AI Elements expects 'output' property
+              errorText: toolResult.error, // AI Elements expects 'errorText' property
+              state: toolResult.error ? 'output-error' : 'output-available'
+            });
+          }
+        }
+
+        // Add any text from this step
+        if (stepInfo.text) {
+          finalParts.push({ type: 'text', text: stepInfo.text });
+        }
+      }
+
+      // Add the final text response if not already included
+      if (finalText && !finalParts.some(part => part.type === 'text' && part.text === finalText)) {
+        finalParts.push({ type: 'text', text: finalText });
+      }
+
+      console.log('Final parts to render:', finalParts);
+
+      // Final state update
+      setChatsData(prev => ({
+        ...prev,
+        [chatId]: {
+          ...prev[chatId],
+          status: 'ready',
+          messages: prev[chatId].messages.map(msg =>
+            (msg.id === aiMessageId || msg.status === 'streaming') ? { ...msg, parts: finalParts, status: 'ready' } : msg
+          )
+        }
+      }));
 
     } catch (error) {
       console.error('Error generating response:', error);
@@ -365,18 +425,6 @@ export default function App() {
         }
       }));
     } finally {
-      // Final state update
-      setChatsData(prev => ({
-        ...prev,
-        [chatId]: {
-          ...prev[chatId],
-          status: 'ready',
-          messages: prev[chatId].messages.map(msg =>
-            (msg.id === aiMessageId || msg.status === 'streaming') ? { ...msg, status: 'ready' } : msg
-          )
-        }
-      }));
-
       // Save messages regardless of outcome, using the ref to get latest state
       const finalMessages = chatsDataRef.current[chatId]?.messages || [];
       const updatedChatsList = await saveChatMessages(chatId, finalMessages);
@@ -413,6 +461,8 @@ export default function App() {
 
   // Render mixed content message parts (text + tool calls/results)
   const renderMessageParts = (message) => {
+    console.log('Rendering message parts:', message.parts);
+
     if (!message.parts || message.parts.length === 0) {
       return <Response />;
     }
@@ -420,6 +470,8 @@ export default function App() {
     return (
       <div className="space-y-4">
         {message.parts.map((part, index) => {
+          console.log('Rendering part:', part.type, part);
+
           // Text part - use Response component for markdown rendering
           if (part.type === 'text') {
             return <Response key={`text-${index}`}>{part.text}</Response>;
@@ -431,11 +483,11 @@ export default function App() {
               <Tool key={`tool-call-${part.toolCallId}-${index}`} defaultOpen>
                 <ToolHeader
                   type={`tool-${part.toolName}`}
-                  state="input-available"
+                  state={part.state || "input-available"}
                   title={`Calling ${part.toolName}`}
                 />
                 <ToolContent>
-                  <ToolInput input={part.args} />
+                  <ToolInput input={part.input || part.args} />
                 </ToolContent>
               </Tool>
             );
@@ -447,13 +499,13 @@ export default function App() {
               <Tool key={`tool-result-${part.toolCallId}-${index}`} defaultOpen>
                 <ToolHeader
                   type={`tool-${part.toolCallId}`}
-                  state={part.error ? "output-error" : "output-available"}
-                  title={`${part.error ? 'Error in' : 'Result from'} ${part.toolCallId}`}
+                  state={part.state || "output-available"}
+                  title={`Result from ${part.toolCallId}`}
                 />
                 <ToolContent>
                   <ToolOutput
-                    output={part.result}
-                    errorText={part.error}
+                    output={part.output || part.result}
+                    errorText={part.errorText}
                   />
                 </ToolContent>
               </Tool>

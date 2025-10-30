@@ -7,30 +7,46 @@ import { z } from 'zod';
  */
 
 /**
- * Perform a web search to find information
+ * Fetch and analyze content from a URL
  */
-export const webSearchTool = tool({
-  description: 'Search the web for current information about coding, documentation, or technical topics',
+export const webFetchTool = tool({
+  description: 'Fetch content from a URL and analyze it',
   inputSchema: z.object({
-    query: z.string().describe('The search query to look up'),
-    maxResults: z.number().optional().default(5).describe('Maximum number of results to return'),
+    url: z.string().describe('The URL to fetch content from'),
   }),
-  execute: async ({ query, maxResults }) => {
-    // This is a placeholder implementation
-    // In a real implementation, you would connect to a search API
-    console.log('Web search requested:', { query, maxResults });
+  execute: async ({ url }) => {
+    console.log('Web fetch requested:', { url });
 
-    return {
-      results: [
-        {
-          title: `Search result for: ${query}`,
-          url: 'https://example.com',
-          snippet: 'This is a placeholder search result. Implement actual search functionality.',
-        }
-      ],
-      query,
-      timestamp: new Date().toISOString(),
-    };
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const content = await response.text();
+
+      // Truncate content if too long for display
+      const maxContentLength = 2000;
+      const truncatedContent = content.length > maxContentLength
+        ? content.substring(0, maxContentLength) + '... (content truncated)'
+        : content;
+
+      return {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers.get('content-type') || 'unknown',
+        contentLength: content.length,
+        content: truncatedContent,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        url,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      };
+    }
   },
 });
 
@@ -85,7 +101,7 @@ export const getDocumentationTool = tool({
  * Export all available tools
  */
 export const tools = {
-  webSearch: webSearchTool,
+  webFetch: webFetchTool,
   analyzeCode: analyzeCodeTool,
   getDocumentation: getDocumentationTool,
 };
