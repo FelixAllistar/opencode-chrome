@@ -309,16 +309,16 @@ export default function App() {
         }));
       }
 
-      // Mark as completed
-      setChatsData(prev => ({
-        ...prev,
-        [chatId]: {
-          ...prev[chatId],
-          status: 'ready',
-          messages: prev[chatId].messages.map(msg =>
-            msg.id === aiMessageId ? { ...msg, status: 'ready' } : msg
-          )
-        }
+       // Mark as completed
+       setChatsData(prev => ({
+         ...prev,
+         [chatId]: {
+           ...prev[chatId],
+           status: 'ready',
+           messages: prev[chatId].messages.map(msg =>
+             msg.id === aiMessageId ? { ...msg, status: 'ready' } : msg
+           )
+         }
        }));
 
     } catch (error) {
