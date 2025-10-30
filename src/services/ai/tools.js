@@ -11,7 +11,7 @@ import { z } from 'zod';
  */
 export const webSearchTool = tool({
   description: 'Search the web for current information about coding, documentation, or technical topics',
-  parameters: z.object({
+  inputSchema: z.object({
     query: z.string().describe('The search query to look up'),
     maxResults: z.number().optional().default(5).describe('Maximum number of results to return'),
   }),
@@ -39,7 +39,7 @@ export const webSearchTool = tool({
  */
 export const analyzeCodeTool = tool({
   description: 'Analyze code currently visible in the browser tab',
-  parameters: z.object({
+  inputSchema: z.object({
     elementType: z.enum(['function', 'class', 'variable', 'all']).optional().default('all').describe('Type of code element to focus on'),
     language: z.string().optional().describe('Programming language to analyze'),
   }),
@@ -61,7 +61,7 @@ export const analyzeCodeTool = tool({
  */
 export const getDocumentationTool = tool({
   description: 'Get documentation or explanations for programming concepts, functions, or libraries',
-  parameters: z.object({
+  inputSchema: z.object({
     concept: z.string().describe('The programming concept, function, or library to document'),
     language: z.string().optional().describe('The programming language context'),
   }),
