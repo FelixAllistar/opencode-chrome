@@ -3,19 +3,13 @@ import { getProvider } from './providers.js';
 import { getTools } from './tools.js';
 
 export const generateResponse = async (modelId, type, messages, apiKey, options = {}) => {
-  console.log('🤖 generateResponse called with:', { modelId, type, messagesLength: messages?.length, hasApiKey: !!apiKey, options });
-
   const model = getProvider(modelId, type, apiKey);
   const tools = options.enableTools ? getTools() : undefined;
-
-  console.log('🔧 Model and tools setup:', { hasModel: !!model, toolsCount: tools ? Object.keys(tools).length : 0 });
 
   const stepData = [];
   let finalText = '';
 
   try {
-    console.log('📡 Calling streamText...');
-
     // Create and await the streamText result properly
     const result = await streamText({
       model,
@@ -31,8 +25,6 @@ export const generateResponse = async (modelId, type, messages, apiKey, options 
       ...(options.maxTokens && { maxTokens: options.maxTokens }),
       // Handle each step completion including tool calls
       onStepFinish: (result) => {
-        console.log('🏁 Step finished - Result:', result);
-
         // Capture step data for UI rendering
         stepData.push({
           stepType: result.stepType,
@@ -45,23 +37,9 @@ export const generateResponse = async (modelId, type, messages, apiKey, options 
       },
       // Handle final completion
       onFinish: ({ text, toolCalls, toolResults, finishReason, usage, steps }) => {
-        console.log('🏁 Stream finished - Text:', text);
-        console.log('🏁 Stream finished - Tool calls:', toolCalls);
-        console.log('🏁 Stream finished - Tool results:', toolResults);
-        console.log('🏁 Stream finished - Steps:', steps);
-        console.log('🏁 Stream finished - Usage:', usage);
-
         finalText = text || '';
       },
     });
-
-    console.log('✅ streamText completed, result keys:', Object.keys(result));
-    console.log('✅ Has textStream?', !!result.textStream);
-    console.log('✅ Step data collected:', stepData.length, 'steps');
-
-    // Check if textStream is a function or iterable
-    console.log('🔍 textStream type:', typeof result.textStream);
-    console.log('🔍 textStream constructor:', result.textStream?.constructor?.name);
 
     // Create a new result object to avoid spreading issues
     const resultWithHelpers = {
@@ -77,30 +55,15 @@ export const generateResponse = async (modelId, type, messages, apiKey, options 
       requests: result.requests,
       // Add helper methods
       getStepData: () => {
-        console.log('📊 getStepData called, returning:', stepData);
         return stepData;
       },
-      getFinalText: () => {
-        console.log('📝 getFinalText called, returning:', finalText);
-        return finalText;
-      },
       consumeUIMessageStream: async function* () {
         yield* readUIMessageStream({
           stream: result.toUIMessageStream(),
         });
-      },
-      consumeUIMessageStream: async function* () {
-        yield* readUIMessageStream({
-          stream: result.toUIMessageStream(),
-        });
-      },
-      getFinalText: () => {
-        console.log('📝 getFinalText called, returning:', finalText);
-        return finalText;
       }
     };
 
-    console.log('🎯 Returning result with helpers, has textStream:', !!resultWithHelpers.textStream);
     return resultWithHelpers;
 
   } catch (error) {

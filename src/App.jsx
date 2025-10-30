@@ -50,6 +50,7 @@ import {
   MessageContent,
 } from './components/ai-elements/message.tsx';
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from './components/ai-elements/tool.tsx';
+import { Reasoning, ReasoningTrigger, ReasoningContent } from './components/ai-elements/reasoning.tsx';
 import { THEMES, THEME_VARIABLES } from './utils/themes.js';
 import { toUIMessage } from './utils/messageUtils.js';
 import {
@@ -154,21 +155,16 @@ export default function App() {
         await setCurrentChatId(activeChatId);
       }
       
-       if (activeChatId && newChatsData[activeChatId]) {
-         const chatMessages = await loadChatMessages(activeChatId);
-         newChatsData[activeChatId].messages = chatMessages;
-         setCurrentChatIdState(activeChatId);
-       } else if (!activeChatId) {
-         const newChat = await createChat();
-         activeChatId = newChat.id;
-         await setCurrentChatId(activeChatId);
-         newChatsData[activeChatId] = {
-           metadata: newChat,
-           messages: [],
-           status: 'ready'
-         };
-         setCurrentChatIdState(activeChatId);
-       }
+        if (activeChatId && newChatsData[activeChatId]) {
+          const chatMessages = await loadChatMessages(activeChatId);
+          // Reset any streaming/submitted statuses since they can't persist across app restarts
+          const resetMessages = chatMessages.map(msg => ({
+            ...msg,
+            status: msg.status === 'streaming' || msg.status === 'submitted' ? 'ready' : msg.status
+          }));
+          newChatsData[activeChatId].messages = resetMessages;
+          setCurrentChatIdState(activeChatId);
+        }
 
        setChatsData(newChatsData);
       setIsInitialDataLoading(false);
@@ -203,11 +199,16 @@ export default function App() {
     // Load messages if they haven't been loaded yet
     if (chatsData[chatId] && chatsData[chatId].messages.length === 0) {
       const messages = await loadChatMessages(chatId);
+      // Reset any streaming/submitted statuses since they can't persist across app restarts
+      const resetMessages = messages.map(msg => ({
+        ...msg,
+        status: msg.status === 'streaming' || msg.status === 'submitted' ? 'ready' : msg.status
+      }));
       setChatsData(prev => ({
         ...prev,
         [chatId]: {
           ...prev[chatId],
-          messages: messages
+          messages: resetMessages
         }
       }));
     }
@@ -372,17 +373,37 @@ export default function App() {
   // Render mixed content message parts (text + tool calls/results)
   const renderMessageParts = (message) => {
     const isStreaming = message.status === 'streaming';
-    console.log('Rendering message parts:', message.parts);
 
     if (!message.parts || message.parts.length === 0) {
+      if (isStreaming) {
+        return <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="animate-pulse">Thinking...</div>
+        </div>;
+      }
+      return <Response />;
+    }
+
+    // Filter out internal/system part types that shouldn't be displayed
+    const displayableParts = message.parts.filter(part => {
+      // Skip internal AI SDK part types
+      if (part.type === 'step-start' || part.type === 'step-end' || part.type === 'step-finish') {
+        return false;
+      }
+      return true;
+    });
+
+    if (!displayableParts || displayableParts.length === 0) {
+      if (isStreaming) {
+        return <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="animate-pulse">Thinking...</div>
+        </div>;
+      }
       return <Response />;
     }
 
     return (
       <div className="space-y-4">
-        {message.parts.map((part, index) => {
-          console.log('Rendering part:', part.type, part);
-
+        {displayableParts.map((part, index) => {
           // Text part - use Response component for markdown rendering
           if (part.type === 'text') {
             return <Response key={`text-${index}`}>{part.text}</Response>;
@@ -443,6 +464,16 @@ export default function App() {
                   )}
                 </ToolContent>
               </Tool>
+            );
+          }
+
+          // Reasoning part
+          if (part.type === 'reasoning') {
+            return (
+              <Reasoning key={`reasoning-${index}`} isStreaming={isStreaming}>
+                <ReasoningTrigger />
+                <ReasoningContent>{part.text}</ReasoningContent>
+              </Reasoning>
             );
           }
 
@@ -528,9 +559,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <SidebarProvider>
-      <AppSidebar
-        chats={chats}
-        currentChatId={currentChatId}
+        <AppSidebar
+          chats={chats}
+          currentChatId={currentChatId}
         onNewChat={createNewChat}
         onSelectChat={switchChat}
         onDeleteChat={deleteChatById}
