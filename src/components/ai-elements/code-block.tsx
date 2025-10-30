@@ -7,8 +7,8 @@ import type { ComponentProps, HTMLAttributes, ReactNode } from "react";
 import { createContext, useContext, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {
-  oneDark,
-  oneLight,
+  vscDarkPlus as oneDark,
+  vs as oneLight,
 } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 type CodeBlockContextType = {
