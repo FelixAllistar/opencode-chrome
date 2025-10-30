@@ -17,6 +17,7 @@ import {
   getCurrentChatId,
   setCurrentChatId
 } from './utils/chatStorage.js';
+import { createErrorForUI, createUnhandledRejectionHandler, filterMessagesForAPI } from './utils/errorHandling.js';
 import { AppSidebar } from './components/app-sidebar.jsx';
 import {
   SidebarProvider,
@@ -69,28 +70,6 @@ import {
 
 
 
-// Format AI SDK errors based on their type
-const formatAIError = (error) => {
-  const name = error.name || '';
-  const message = error.message || 'Unknown error';
-
-  if (name === 'AI_APICallError') {
-    return `API Call Error: ${message}`;
-  } else if (name === 'AI_NoOutputGeneratedError') {
-    return `No Output Generated: ${message}`;
-  } else if (name === 'AI_RetryError') {
-    return `Retry Error: ${message}`;
-  } else if (name === 'AI_ParseError') {
-    return `Parse Error: ${message}`;
-  } else if (name === 'AI_TooManyToolCallsError') {
-    return `Too Many Tool Calls: ${message}`;
-  } else if (name.startsWith('AI_')) {
-    // Generic AI error formatting
-    return `${name.replace('AI_', '').replace(/([A-Z])/g, ' $1').trim()}: ${message}`;
-  } else {
-    return `Error: ${message}`;
-  }
-};
 
 export default function App() {
   const [chatsData, setChatsData] = useState({});
@@ -109,89 +88,18 @@ export default function App() {
 
   // Handle unhandled promise rejections at the app level
   useEffect(() => {
-    const handleUnhandledRejection = (event) => {
-      console.error('🚨 Unhandled Promise Rejection:', event.reason);
-
-      // Handle AI SDK errors that might not be caught by streaming
-      if (event.reason?.name?.startsWith('AI_')) {
-        console.log('🆘 Handling uncaught AI SDK error in UI');
-
-        // Get the most recent chat to display the error
-        const recentChatId = currentChatId;
-        if (recentChatId && chatsData[recentChatId] && chatsData[recentChatId].status !== 'error') {
-          // Extract the underlying error from the stack if possible
-          const stack = event.reason.stack || '';
-          const aiCallErrorMatch = stack.match(/AI_APICallError: (.+)/);
-          const errorMessage = aiCallErrorMatch ? aiCallErrorMatch[1] : (event.reason.cause?.message || event.reason.message || 'An unhandled error occurred');
-          const errorDetails = event.reason.cause?.stack || event.reason.stack || '';
-
-          const errorForUI = {
-            toolName: 'Error',
-            args: {},
-            result: null,
-            error: errorMessage,
-            errorDetails: '',
-            errorCategory: 'error',
-            shouldRetry: false,
-            retryDelay: 0
-          };
-
-          // Find the last AI message and update it with error details
-          const messages = chatsData[recentChatId].messages;
-          const lastAiMessage = [...messages].reverse().find(msg => msg.role === 'assistant');
-
-          // Skip if the last AI message already has an error
-          const hasError = lastAiMessage?.parts?.some(part => part.type === 'tool-result' && part.error);
-          if (lastAiMessage && !hasError) {
-            flushSync(() => setChatsData(prev => ({
-              ...prev,
-              [recentChatId]: {
-                ...prev[recentChatId],
-                status: 'error',
-                messages: prev[recentChatId].messages.map(msg =>
-                  msg.id === lastAiMessage.id
-                    ? {
-                        ...msg,
-                        status: 'error',
-                        parts: [{
-                          type: 'tool-result',
-                          toolName: errorForUI.toolName,
-                          args: errorForUI.args,
-                          result: errorForUI.result,
-                          error: errorForUI.error,
-                          errorDetails: errorForUI.errorDetails,
-                          errorCategory: errorForUI.errorCategory,
-                          shouldRetry: errorForUI.shouldRetry,
-                          retryDelay: errorForUI.retryDelay,
-                          toolCallId: 'error'
-                        }]
-                      }
-                    : msg
-                )
-              }
-            })));
-          }
-        }
-
-        // Prevent the error from showing in console again
-        event.preventDefault();
-        return;
-      }
-
-      // Log other unhandled errors for debugging
-      console.log('📋 Unhandled error details:', {
-        name: event.reason?.name,
-        message: event.reason?.message,
-        stack: event.reason?.stack
-      });
-    };
+    const handleUnhandledRejection = createUnhandledRejectionHandler(
+      () => currentChatId,
+      () => chatsData,
+      setChatsData
+    );
 
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
     return () => {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
-  }, [currentChatId, chatsData]);
+  }, [currentChatId, chatsData, setChatsData]);
 
   // Apply theme immediately for loading screen
   useEffect(() => {
@@ -373,7 +281,8 @@ export default function App() {
     };
 
     // Collect messages for AI (up to the current user message - don't include the empty AI response)
-    const messagesToSend = [...(chatsDataRef.current[chatId]?.messages || []), userMessage];
+    // Filter out any messages with errors to avoid sending invalid content to the API
+    const messagesToSend = [...filterMessagesForAPI(chatsDataRef.current[chatId]?.messages || []), userMessage];
 
     // Update state immediately
     setChatsData(prev => ({
@@ -447,16 +356,7 @@ export default function App() {
         console.error('❌ Error during streaming or completion:', streamError);
 
         // Format the error directly for UI display
-        const errorForUI = {
-          toolName: 'Error',
-          args: {},
-          result: null,
-          error: formatAIError(streamError),
-          errorDetails: '',
-          errorCategory: 'error',
-          shouldRetry: false,
-          retryDelay: 0
-        };
+        const errorForUI = createErrorForUI(streamError);
 
         // Update the message with error details
         flushSync(() => setChatsData(prev => ({
@@ -495,16 +395,7 @@ export default function App() {
       console.error('Error generating response:', error);
 
       // Format the error directly for UI display
-      const errorForUI = {
-        toolName: 'Error',
-        args: {},
-        result: null,
-        error: formatAIError(error),
-        errorDetails: '',
-        errorCategory: 'error',
-        shouldRetry: false,
-        retryDelay: 0
-      };
+      const errorForUI = createErrorForUI(error);
 
       flushSync(() => setChatsData(prev => ({
         ...prev,
