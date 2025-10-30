@@ -8,6 +8,7 @@ export const generateResponse = async (modelId, type, messages, apiKey, options 
 
   const stepData = [];
   let finalText = '';
+  let streamError = null;
 
   try {
     // Create and await the streamText result properly
@@ -39,6 +40,11 @@ export const generateResponse = async (modelId, type, messages, apiKey, options 
       onFinish: ({ text, toolCalls, toolResults, finishReason, usage, steps }) => {
         finalText = text || '';
       },
+      // Handle errors during streaming
+      onError: ({ error }) => {
+        console.error('Streaming error:', error);
+        streamError = error; // Store the error to yield later
+      },
     });
 
     // Create a new result object to avoid spreading issues
@@ -61,6 +67,9 @@ export const generateResponse = async (modelId, type, messages, apiKey, options 
         yield* readUIMessageStream({
           stream: result.toUIMessageStream(),
         });
+        if (streamError) {
+          yield { type: 'error', error: streamError };
+        }
       }
     };
 

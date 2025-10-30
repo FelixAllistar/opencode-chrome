@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { Plus, Settings } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
+
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
 import { ThemeSwitcher } from './components/settings/ThemeSwitcher.jsx';
 
@@ -67,6 +68,30 @@ import {
 
 
 
+
+// Format AI SDK errors based on their type
+const formatAIError = (error) => {
+  const name = error.name || '';
+  const message = error.message || 'Unknown error';
+
+  if (name === 'AI_APICallError') {
+    return `API Call Error: ${message}`;
+  } else if (name === 'AI_NoOutputGeneratedError') {
+    return `No Output Generated: ${message}`;
+  } else if (name === 'AI_RetryError') {
+    return `Retry Error: ${message}`;
+  } else if (name === 'AI_ParseError') {
+    return `Parse Error: ${message}`;
+  } else if (name === 'AI_TooManyToolCallsError') {
+    return `Too Many Tool Calls: ${message}`;
+  } else if (name.startsWith('AI_')) {
+    // Generic AI error formatting
+    return `${name.replace('AI_', '').replace(/([A-Z])/g, ' $1').trim()}: ${message}`;
+  } else {
+    return `Error: ${message}`;
+  }
+};
+
 export default function App() {
   const [chatsData, setChatsData] = useState({});
   const [currentChatId, setCurrentChatIdState] = useState(null);
@@ -81,6 +106,90 @@ export default function App() {
   const [isDark, setIsDark] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Handle unhandled promise rejections at the app level
+  useEffect(() => {
+    const handleUnhandledRejection = (event) => {
+      console.error('🚨 Unhandled Promise Rejection:', event.reason);
+
+      // Handle AI SDK errors that might not be caught by streaming
+      if (event.reason?.name?.startsWith('AI_')) {
+        console.log('🆘 Handling uncaught AI SDK error in UI');
+
+        // Get the most recent chat to display the error
+        const recentChatId = currentChatId;
+        if (recentChatId && chatsData[recentChatId] && chatsData[recentChatId].status !== 'error') {
+          // Extract the underlying error from the stack if possible
+          const stack = event.reason.stack || '';
+          const aiCallErrorMatch = stack.match(/AI_APICallError: (.+)/);
+          const errorMessage = aiCallErrorMatch ? aiCallErrorMatch[1] : (event.reason.cause?.message || event.reason.message || 'An unhandled error occurred');
+          const errorDetails = event.reason.cause?.stack || event.reason.stack || '';
+
+          const errorForUI = {
+            toolName: 'Error',
+            args: {},
+            result: null,
+            error: errorMessage,
+            errorDetails: '',
+            errorCategory: 'error',
+            shouldRetry: false,
+            retryDelay: 0
+          };
+
+          // Find the last AI message and update it with error details
+          const messages = chatsData[recentChatId].messages;
+          const lastAiMessage = [...messages].reverse().find(msg => msg.role === 'assistant');
+
+          if (lastAiMessage) {
+            flushSync(() => setChatsData(prev => ({
+              ...prev,
+              [recentChatId]: {
+                ...prev[recentChatId],
+                status: 'error',
+                messages: prev[recentChatId].messages.map(msg =>
+                  msg.id === lastAiMessage.id
+                    ? {
+                        ...msg,
+                        status: 'error',
+                        parts: [{
+                          type: 'tool-result',
+                          toolName: errorForUI.toolName,
+                          args: errorForUI.args,
+                          result: errorForUI.result,
+                          error: errorForUI.error,
+                          errorDetails: errorForUI.errorDetails,
+                          errorCategory: errorForUI.errorCategory,
+                          shouldRetry: errorForUI.shouldRetry,
+                          retryDelay: errorForUI.retryDelay,
+                          toolCallId: 'error'
+                        }]
+                      }
+                    : msg
+                )
+              }
+            })));
+          }
+        }
+
+        // Prevent the error from showing in console again
+        event.preventDefault();
+        return;
+      }
+
+      // Log other unhandled errors for debugging
+      console.log('📋 Unhandled error details:', {
+        name: event.reason?.name,
+        message: event.reason?.message,
+        stack: event.reason?.stack
+      });
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, [currentChatId, chatsData]);
 
   // Apply theme immediately for loading screen
   useEffect(() => {
@@ -275,64 +384,153 @@ export default function App() {
     }));
 
     try {
-      // Enable tools by default
-      const result = await generateResponse(selectedModel.id, selectedModel.type, messagesToSend, apiKey, {
-        enableTools: true,
-        system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
-      });
-
       setChatsData(prev => ({
         ...prev,
         [chatId]: { ...prev[chatId], status: 'streaming' }
       }));
 
-      // Consume the UI message stream
-      for await (const uiMessage of result.consumeUIMessageStream()) {
-        // Check if generation was stopped
-        if (chatsDataRef.current[chatId]?.status !== 'streaming') {
-          break;
+      // Consume the UI message stream and handle completion
+      try {
+        console.log('🚀 Starting stream consumption...');
+
+        // Enable tools by default
+        const result = await generateResponse(selectedModel.id, selectedModel.type, messagesToSend, apiKey, {
+          enableTools: true,
+          system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
+        });
+
+        console.log('✅ generateResponse completed successfully');
+
+        for await (const uiMessage of result.consumeUIMessageStream()) {
+          // Check for error parts
+          if (uiMessage.type === 'error') {
+            throw uiMessage.error;
+          }
+
+          // Check if generation was stopped
+          if (chatsDataRef.current[chatId]?.status !== 'streaming') {
+            console.log('⏹️ Generation was stopped, breaking out of loop');
+            break;
+          }
+
+          // Update the AI message with streaming parts
+          setChatsData(prev => ({
+            ...prev,
+            [chatId]: {
+              ...prev[chatId],
+              messages: prev[chatId].messages.map(msg =>
+                msg.id === aiMessageId
+                  ? { ...msg, parts: uiMessage.parts, status: 'streaming' }
+                  : msg
+              )
+            }
+          }));
         }
 
-        // Update the AI message with streaming parts
+        console.log('✅ Stream consumption completed successfully');
+
+        // Mark as completed
         setChatsData(prev => ({
           ...prev,
           [chatId]: {
             ...prev[chatId],
+            status: 'ready',
             messages: prev[chatId].messages.map(msg =>
-              msg.id === aiMessageId
-                ? { ...msg, parts: uiMessage.parts, status: 'streaming' }
-                : msg
+              msg.id === aiMessageId ? { ...msg, status: 'ready' } : msg
             )
           }
         }));
-      }
 
-       // Mark as completed
-       setChatsData(prev => ({
-         ...prev,
-         [chatId]: {
-           ...prev[chatId],
-           status: 'ready',
-           messages: prev[chatId].messages.map(msg =>
-             msg.id === aiMessageId ? { ...msg, status: 'ready' } : msg
-           )
-         }
-       }));
+      } catch (streamError) {
+        console.error('❌ Error during streaming or completion:', streamError);
+
+        // Format the error directly for UI display
+        const errorForUI = {
+          toolName: 'Error',
+          args: {},
+          result: null,
+          error: formatAIError(streamError),
+          errorDetails: '',
+          errorCategory: 'error',
+          shouldRetry: false,
+          retryDelay: 0
+        };
+
+        // Update the message with error details
+        flushSync(() => setChatsData(prev => ({
+          ...prev,
+          [chatId]: {
+            ...prev[chatId],
+            status: 'error',
+            messages: prev[chatId].messages.map(msg =>
+              msg.id === aiMessageId
+                ? {
+                    ...msg,
+                    status: 'error',
+                    parts: [{
+                      type: 'tool-result',
+                      toolName: errorForUI.toolName,
+                      args: errorForUI.args,
+                      result: errorForUI.result,
+                      error: errorForUI.error,
+                      errorDetails: errorForUI.errorDetails,
+                      errorCategory: errorForUI.errorCategory,
+                      shouldRetry: errorForUI.shouldRetry,
+                      retryDelay: errorForUI.retryDelay,
+                      toolCallId: 'error'
+                    }]
+                  }
+                : msg
+            )
+          }
+        })));
+
+        // Don't continue to the finally block if we've handled the error
+        return;
+      }
 
     } catch (error) {
       console.error('Error generating response:', error);
-      setChatsData(prev => ({
+
+      // Format the error directly for UI display
+      const errorForUI = {
+        toolName: 'Error',
+        args: {},
+        result: null,
+        error: formatAIError(error),
+        errorDetails: '',
+        errorCategory: 'error',
+        shouldRetry: false,
+        retryDelay: 0
+      };
+
+      flushSync(() => setChatsData(prev => ({
         ...prev,
         [chatId]: {
           ...prev[chatId],
           status: 'error',
           messages: prev[chatId].messages.map(msg =>
             msg.id === aiMessageId
-              ? { ...msg, status: 'error', parts: [{ type: 'text', text: `Sorry, there was an error: ${error.message}` }] }
+              ? {
+                  ...msg,
+                  status: 'error',
+                  parts: [{
+                    type: 'tool-result',
+                    toolName: errorForUI.toolName,
+                    args: errorForUI.args,
+                    result: errorForUI.result,
+                    error: errorForUI.error,
+                    errorDetails: errorForUI.errorDetails,
+                    errorCategory: errorForUI.errorCategory,
+                    shouldRetry: errorForUI.shouldRetry,
+                    retryDelay: errorForUI.retryDelay,
+                    toolCallId: 'error'
+                  }]
+                }
               : msg
           )
         }
-      }));
+      })));
     } finally {
       // Save messages regardless of outcome, using the ref to get latest state
       const finalMessages = chatsDataRef.current[chatId]?.messages || [];
@@ -425,18 +623,39 @@ export default function App() {
 
           // Tool result part
           if (part.type === 'tool-result') {
+            const hasError = Boolean(part.error || part.errorDetails);
+            const errorText = part.errorDetails ? `${part.error}\n\n${part.errorDetails}` : part.error;
+
+            // If this is an error, show a simple red card with just the error message
+            if (hasError) {
+              return (
+                <div key={`tool-result-${part.toolCallId}-${index}`} className="p-4 bg-red-50 border border-red-200 rounded-lg my-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                    <div className="text-red-700 text-sm">
+                      {part.error}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            // For non-error tool results, keep the original Tool component
             return (
               <Tool key={`tool-result-${part.toolCallId}-${index}`} defaultOpen>
                 <ToolHeader
                   type="tool-result"
-                  state={part.error ? "output-error" : "output-available"}
+                  state="output-available"
                   title={part.toolName || 'Tool Result'}
                 />
                 <ToolContent>
                   <ToolInput input={part.args} />
                   <ToolOutput
                     output={part.result}
-                    errorText={part.error}
                   />
                 </ToolContent>
               </Tool>
@@ -564,7 +783,7 @@ export default function App() {
         onSelectChat={switchChat}
         onDeleteChat={deleteChatById}
       />
-       <SidebarInset className="h-screen flex flex-col">
+        <SidebarInset className="h-screen flex flex-col">
           <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
             <div className="flex items-center justify-between px-4 w-full">
               <div className="flex items-center gap-2">
@@ -574,115 +793,115 @@ export default function App() {
                   <Plus className="h-8 w-8" />
                 </Button>
                 <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-                 <Breadcrumb>
-                   <BreadcrumbList>
-                     <BreadcrumbItem className="hidden md:block">
-                       <BreadcrumbLink href="#">
-                         AI Chat
-                       </BreadcrumbLink>
-                     </BreadcrumbItem>
-                     <BreadcrumbSeparator className="hidden md:block" />
-                     <BreadcrumbItem>
-                       <BreadcrumbPage>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Chat' : 'No Chat'}</BreadcrumbPage>
-                     </BreadcrumbItem>
-                   </BreadcrumbList>
-                 </Breadcrumb>
+                  <Breadcrumb>
+                    <BreadcrumbList>
+                      <BreadcrumbItem className="hidden md:block">
+                        <BreadcrumbLink href="#">
+                          AI Chat
+                        </BreadcrumbLink>
+                      </BreadcrumbItem>
+                      <BreadcrumbSeparator className="hidden md:block" />
+                      <BreadcrumbItem>
+                        <BreadcrumbPage>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Chat' : 'No Chat'}</BreadcrumbPage>
+                      </BreadcrumbItem>
+                    </BreadcrumbList>
+                  </Breadcrumb>
               </div>
               <div className="flex items-center space-x-2">
-                 <div className="relative">
-                    <Button
-                      variant="ghost"
-                      size="default"
-                      onClick={() => setSettingsOpen(!settingsOpen)}
-                      className="h-12 w-12 p-0"
-                    >
-                      <Settings className="h-8 w-8" />
-                    </Button>
-                   {settingsOpen && (
-                     <div className="absolute right-0 top-full mt-1 w-48 bg-popover border rounded-md shadow-lg z-50">
-                       <div className="p-2 space-y-1">
-                         <div className="px-2 py-1 text-sm font-medium">Settings</div>
-                         <div className="border-t pt-1">
-                           <div className="px-2 py-1 text-xs text-muted-foreground">Theme</div>
-                           <div className="p-2">
-                             <ThemeSwitcher />
-                           </div>
-                         </div>
-                         <button
-                           onClick={clearSettings}
-                           className="w-full text-left px-2 py-1 text-sm hover:bg-accent rounded"
-                         >
-                           Clear All Chats
-                         </button>
-                       </div>
-                     </div>
-                   )}
-                 </div>
-               </div>
-           </div>
-         </header>
-           <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Conversation area - takes remaining space */}
-              <div className="flex-1 overflow-hidden">
-                <Conversation className="h-full">
-                  <ConversationContent className="p-4">
-                    {currentChatMessages.length === 0 ? (
-                      <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
-                        <div className="space-y-1">
-                          <h3 className="font-medium text-sm">No messages yet</h3>
-                          <p className="text-muted-foreground text-sm">Start a conversation to see messages here</p>
+                  <div className="relative">
+                     <Button
+                       variant="ghost"
+                       size="default"
+                       onClick={() => setSettingsOpen(!settingsOpen)}
+                       className="h-12 w-12 p-0"
+                     >
+                       <Settings className="h-8 w-8" />
+                     </Button>
+                    {settingsOpen && (
+                      <div className="absolute right-0 top-full mt-1 w-48 bg-popover border rounded-md shadow-lg z-50">
+                        <div className="p-2 space-y-1">
+                          <div className="px-2 py-1 text-sm font-medium">Settings</div>
+                          <div className="border-t pt-1">
+                            <div className="px-2 py-1 text-xs text-muted-foreground">Theme</div>
+                            <div className="p-2">
+                              <ThemeSwitcher />
+                            </div>
+                          </div>
+                          <button
+                            onClick={clearSettings}
+                            className="w-full text-left px-2 py-1 text-sm hover:bg-accent rounded"
+                          >
+                            Clear All Chats
+                          </button>
                         </div>
                       </div>
-                    ) : (
-                      currentChatMessages.map((msg, i) => {
-                        return (
-                          <Branch key={`${currentChatId}-${i}`}>
-                            <BranchMessages>
-                                 <Message from={msg.role}>
-                                   <MessageContent variant="flat">
-                                     {renderMessageParts(msg)}
-                                   </MessageContent>
-                                </Message>
-                            </BranchMessages>
-                          </Branch>
-                        );
-                      })
                     )}
-                  </ConversationContent>
-                  <ConversationScrollButton />
-                </Conversation>
-              </div>
+                  </div>
+                </div>
+            </div>
+          </header>
+            <div className="flex-1 flex flex-col overflow-hidden">
+               {/* Conversation area - takes remaining space */}
+               <div className="flex-1 overflow-hidden">
+                 <Conversation className="h-full">
+                   <ConversationContent className="p-4">
+                     {currentChatMessages.length === 0 ? (
+                       <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
+                         <div className="space-y-1">
+                           <h3 className="font-medium text-sm">No messages yet</h3>
+                           <p className="text-muted-foreground text-sm">Start a conversation to see messages here</p>
+                         </div>
+                       </div>
+                     ) : (
+                       currentChatMessages.map((msg, i) => {
+                         return (
+                           <Branch key={`${currentChatId}-${i}`}>
+                             <BranchMessages>
+                                  <Message from={msg.role}>
+                                    <MessageContent variant="flat">
+                                      {renderMessageParts(msg)}
+                                    </MessageContent>
+                                 </Message>
+                             </BranchMessages>
+                           </Branch>
+                         );
+                       })
+                     )}
+                   </ConversationContent>
+                   <ConversationScrollButton />
+                 </Conversation>
+               </div>
 
-              {/* Prompt input - fixed at bottom */}
-              <div className="border-t bg-background p-4">
-                <PromptInput onSubmit={handleSend}>
-                  <PromptInputBody>
-                    <PromptInputTextarea />
-                  </PromptInputBody>
-                  <PromptInputFooter>
-                    <PromptInputTools>
-                      <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
-                        <PromptInputModelSelectTrigger>
-                          <PromptInputModelSelectValue />
-                        </PromptInputModelSelectTrigger>
-                        <PromptInputModelSelectContent>
-                          {MODELS.map((model) => (
-                            <PromptInputModelSelectItem
-                              key={model.id}
-                              value={model.id}
-                            >
-                              {model.name}
-                            </PromptInputModelSelectItem>
-                          ))}
-                        </PromptInputModelSelectContent>
-                      </PromptInputModelSelect>
-                    </PromptInputTools>
-                    <PromptInputSubmit status={currentChatStatus} />
-                  </PromptInputFooter>
-                </PromptInput>
-              </div>
-           </div>
-          </SidebarInset>
+               {/* Prompt input - fixed at bottom */}
+               <div className="border-t bg-background p-4">
+                 <PromptInput onSubmit={handleSend}>
+                   <PromptInputBody>
+                     <PromptInputTextarea />
+                   </PromptInputBody>
+                   <PromptInputFooter>
+                     <PromptInputTools>
+                       <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
+                         <PromptInputModelSelectTrigger>
+                           <PromptInputModelSelectValue />
+                         </PromptInputModelSelectTrigger>
+                         <PromptInputModelSelectContent>
+                           {MODELS.map((model) => (
+                             <PromptInputModelSelectItem
+                               key={model.id}
+                               value={model.id}
+                             >
+                               {model.name}
+                             </PromptInputModelSelectItem>
+                           ))}
+                         </PromptInputModelSelectContent>
+                       </PromptInputModelSelect>
+                     </PromptInputTools>
+                     <PromptInputSubmit status={currentChatStatus} />
+                   </PromptInputFooter>
+                 </PromptInput>
+               </div>
+            </div>
+           </SidebarInset>
       </SidebarProvider>
     </ThemeProvider>
   );

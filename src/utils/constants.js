@@ -10,5 +10,6 @@ export const MODELS = [
   { id: 'grok-code', name: 'Grok Code Fast 1', type: 'openai-compatible' },
   { id: 'kimi-k2', name: 'Kimi K2', type: 'openai-compatible' },
   
-  { id: 'big-pickle', name: 'Big Pickle', type: 'openai-compatible' }
+   { id: 'big-pickle', name: 'Big Pickle', type: 'openai-compatible' },
+   { id: 'error-test', name: 'Error Test Model', type: 'openai-compatible' }
 ];
