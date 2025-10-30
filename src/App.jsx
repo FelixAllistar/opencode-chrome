@@ -293,54 +293,90 @@ export default function App() {
 
       console.log('📊 Status set to streaming');
 
-      // Initialize AI message with empty parts array
-      let currentText = '';
+       // Initialize AI message with empty parts array
+       let currentText = '';
+       const streamingToolParts = new Map(); // Track tool parts during streaming
 
-      // Stream the text response (this is the final AI response with tools already incorporated)
-      if (result.textStream) {
-        console.log('🔄 Starting to iterate over textStream...');
-        let streamCount = 0;
+       // Stream the full response including tools
+       if (result.fullStream) {
+         console.log('🔄 Starting to iterate over fullStream...');
+         let streamCount = 0;
 
-        for await (const part of result.textStream) {
-          streamCount++;
-          console.log(`📝 Stream part ${streamCount}:`, part);
+         for await (const part of result.fullStream) {
+           streamCount++;
+           console.log(`📝 Stream part ${streamCount}:`, part);
 
-          // Check if generation was stopped
-          if (chatsDataRef.current[chatId]?.status !== 'streaming') {
-            console.log('⏹️ Generation was stopped, breaking out of stream');
-            break;
-          }
+           // Check if generation was stopped
+           if (chatsDataRef.current[chatId]?.status !== 'streaming') {
+             console.log('⏹️ Generation was stopped, breaking out of stream');
+             break;
+           }
 
-          // Handle text streaming
-          if (typeof part === 'string') {
-            currentText += part;
-            console.log(`📄 Added string text, current length: ${currentText.length}`);
-          } else if (part && part.type === 'text') {
-            currentText += part.text;
-            console.log(`📄 Added text part, current length: ${currentText.length}`);
-          }
+           // Handle text streaming
+           if (typeof part === 'string') {
+             currentText += part;
+             console.log(`📄 Added string text, current length: ${currentText.length}`);
+           } else if (part && part.type === 'text') {
+             currentText += part.text;
+             console.log(`📄 Added text part, current length: ${currentText.length}`);
+           }
 
-          // Update state with streaming text
-          setChatsData(prev => {
-            console.log('💾 Updating state with streaming text...');
-            return {
-              ...prev,
-              [chatId]: {
-                ...prev[chatId],
-                messages: prev[chatId].messages.map(msg =>
-                  msg.id === aiMessageId
-                    ? { ...msg, parts: [{ type: 'text', text: currentText }], status: 'streaming' }
-                    : msg
-                )
-              }
-            };
-          });
-        }
+            // Handle tool call streaming
+           else if (part && part.type === 'tool-call') {
+             console.log('🔧 Tool call streaming:', part);
+             console.log('🔧 Tool call input:', part.input, 'args:', part.args);
+             const toolPart = {
+               type: `tool-${part.toolName}`,
+               toolCallId: part.toolCallId,
+               toolName: part.toolName,
+               input: part.input || part.args,
+               state: 'input-available',
+               output: undefined,
+               errorText: undefined
+             };
+             console.log('🔧 Created tool part with input:', toolPart.input);
+             streamingToolParts.set(part.toolCallId, toolPart);
+           }
 
-        console.log(`✅ Stream completed after ${streamCount} parts`);
-      } else {
-        console.log('❌ No textStream found in result!');
-      }
+           // Handle tool result streaming
+           else if (part && part.type === 'tool-result') {
+             console.log('🔧 Tool result streaming:', part);
+             const existingToolPart = streamingToolParts.get(part.toolCallId);
+             if (existingToolPart) {
+               existingToolPart.output = part.result;
+               existingToolPart.errorText = part.error;
+               existingToolPart.state = part.error ? 'output-error' : 'output-available';
+             }
+           }
+
+           // Build current parts for streaming update
+           const currentParts = [];
+           if (currentText) {
+             currentParts.push({ type: 'text', text: currentText });
+           }
+           currentParts.push(...streamingToolParts.values());
+
+           // Update state with streaming content
+           setChatsData(prev => {
+             console.log('💾 Updating state with streaming content...');
+             return {
+               ...prev,
+               [chatId]: {
+                 ...prev[chatId],
+                 messages: prev[chatId].messages.map(msg =>
+                   msg.id === aiMessageId
+                     ? { ...msg, parts: currentParts, status: 'streaming' }
+                     : msg
+                 )
+               }
+             };
+           });
+         }
+
+         console.log(`✅ Stream completed after ${streamCount} parts`);
+       } else {
+         console.log('❌ No fullStream found in result!');
+       }
 
       // Get step data and final text from the result
       const stepData = result.getStepData();
@@ -354,34 +390,38 @@ export default function App() {
 
       // Build parts array from step data and final text using AI Elements format
       const finalParts = [];
+      const toolParts = new Map(); // Map to combine tool calls and results by toolCallId
 
       // Process each step to extract tool calls and results
       for (const stepInfo of stepData) {
-        // Add tool calls from this step in AI Elements format
+        // Add tool calls from this step - combine with existing or create new
         if (stepInfo.toolCalls && stepInfo.toolCalls.length > 0) {
           for (const toolCall of stepInfo.toolCalls) {
-            finalParts.push({
-              type: 'tool-call',
+            console.log('🔧 Processing tool call:', toolCall);
+            console.log('🔧 Tool call input:', toolCall.input, 'args:', toolCall.args);
+            const toolPart = {
+              type: `tool-${toolCall.toolName}`,
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
-              args: toolCall.args,
-              input: toolCall.args, // AI Elements expects 'input' property
-              state: 'input-available'
-            });
+              input: toolCall.input || toolCall.args,
+              state: 'input-available',
+              output: undefined,
+              errorText: undefined
+            };
+            console.log('🔧 Created final tool part with input:', toolPart.input);
+            toolParts.set(toolCall.toolCallId, toolPart);
           }
         }
 
-        // Add tool results from this step in AI Elements format
+        // Update tool results for existing tool calls
         if (stepInfo.toolResults && stepInfo.toolResults.length > 0) {
           for (const toolResult of stepInfo.toolResults) {
-            finalParts.push({
-              type: 'tool-result',
-              toolCallId: toolResult.toolCallId,
-              result: toolResult.result,
-              output: toolResult.result, // AI Elements expects 'output' property
-              errorText: toolResult.error, // AI Elements expects 'errorText' property
-              state: toolResult.error ? 'output-error' : 'output-available'
-            });
+            const existingToolPart = toolParts.get(toolResult.toolCallId);
+            if (existingToolPart) {
+              existingToolPart.output = toolResult.result;
+              existingToolPart.errorText = toolResult.error;
+              existingToolPart.state = toolResult.error ? 'output-error' : 'output-available';
+            }
           }
         }
 
@@ -390,6 +430,9 @@ export default function App() {
           finalParts.push({ type: 'text', text: stepInfo.text });
         }
       }
+
+      // Add all tool parts to final parts
+      finalParts.push(...toolParts.values());
 
       // Add the final text response if not already included
       if (finalText && !finalParts.some(part => part.type === 'text' && part.text === finalText)) {
@@ -477,36 +520,23 @@ export default function App() {
             return <Response key={`text-${index}`}>{part.text}</Response>;
           }
 
-          // Tool call part - display tool call information
-          if (part.type === 'tool-call') {
+          // Tool part - display combined tool call and result information
+          if (part.type.startsWith('tool-')) {
             return (
-              <Tool key={`tool-call-${part.toolCallId}-${index}`} defaultOpen>
+              <Tool key={`tool-${part.toolCallId}-${index}`} defaultOpen>
                 <ToolHeader
-                  type={`tool-${part.toolName}`}
+                  type={part.type}
                   state={part.state || "input-available"}
-                  title={`Calling ${part.toolName}`}
+                  title={part.toolName}
                 />
                 <ToolContent>
-                  <ToolInput input={part.input || part.args} />
-                </ToolContent>
-              </Tool>
-            );
-          }
-
-          // Tool result part - display tool execution result
-          if (part.type === 'tool-result') {
-            return (
-              <Tool key={`tool-result-${part.toolCallId}-${index}`} defaultOpen>
-                <ToolHeader
-                  type={`tool-${part.toolCallId}`}
-                  state={part.state || "output-available"}
-                  title={`Result from ${part.toolCallId}`}
-                />
-                <ToolContent>
-                  <ToolOutput
-                    output={part.output || part.result}
-                    errorText={part.errorText}
-                  />
+                  <ToolInput input={part.input} />
+                  {(part.output !== undefined || part.errorText) && (
+                    <ToolOutput
+                      output={part.output}
+                      errorText={part.errorText}
+                    />
+                  )}
                 </ToolContent>
               </Tool>
             );
