@@ -21,19 +21,19 @@ NEVER run pnpm build or pnpm run dev. the user will be responsible for building.
 ## Architecture
 
 ### Core Components
-- **`App.jsx`**: Main application with chat management and UI state
+- **`App.jsx`**: Main application with chat management, UI state, and advanced message rendering for tool calls and reasoning
 - **`AppSidebar.tsx`**: Custom sidebar component for chat navigation and management
 - **`messageUtils.js`**: Utilities for converting between internal message format and AI Elements UIMessage format
 - **`chatStorage.js`**: Chrome storage utilities for persistence
 
 ### Key Technologies
-- **React 19.2**: Modern React with hooks for state management. new Activity component from react 19.2
-- **Vercel AI SDK 5**: Latest AI SDK for streaming and model integration
-- **Vercel AI Elements**: Professional UI components for AI chat interfaces following Vercel AI Elements patterns (Branch, Message, PromptInput, Conversation, Response)
-- **Streamdown**: Unified Markdown and LaTeX rendering (replaces multiple packages)
-- **Chrome Storage API**: Persistent storage for chats and settings
-- **Tailwind CSS**: Utility-first CSS framework for styling
-- **Vite**: Fast build tool and development server
+- **React 19.2**: Modern React with hooks for state management
+- **Vercel AI SDK 5**: Latest AI SDK for streaming responses, tool calling, and multi-step conversations with `readUIMessageStream` for incremental UI updates
+- **Vercel AI Elements**: Professional UI components for AI chat interfaces (Branch, Message, PromptInput, Conversation, Response, Tool, Reasoning) with built-in streaming support
+- **Streamdown**: Unified Markdown and LaTeX rendering for rich text content
+- **Chrome Storage API**: Persistent storage for chats and settings with separate keys for metadata and messages
+- **Tailwind CSS**: Utility-first CSS framework with custom theme variables
+- **Vite**: Fast build tool and development server for the browser extension
 
 ### Theme System
 - **Theme Definitions**: 24 themes with comprehensive color schemes for backgrounds, text, borders, syntax highlighting, markdown, and diffs. Each theme is maintained in its own file under `src/utils/themes/` (e.g., `zenburn.js`, `dracula.js`) for better organization and maintainability
@@ -48,24 +48,43 @@ NEVER run pnpm build or pnpm run dev. the user will be responsible for building.
 ### Multi-Chat Architecture
 Chats are stored as objects keyed by chat ID in `chatsData` state, each containing:
 - `metadata`: Chat info (id, title, timestamps, message count, last message)
-- `messages`: Array of message objects with role, parts (text), status
+- `messages`: Array of message objects with role, parts (text, tool-call, tool-result, reasoning), and status
 - `status`: Current chat state ('ready', 'submitted', 'streaming', 'error')
 
-Messages are loaded on-demand when switching chats. Streaming responses update the specific chat's messages in real-time. Persistence uses Chrome local storage with separate keys for metadata and messages.
+Messages now support rich content with multiple part types:
+- **Text parts**: Standard text content rendered with markdown support via Streamdown
+- **Tool-call parts**: Display tool invocations with function name, arguments, and unique toolCallId for correlation
+- **Tool-result parts**: Show tool execution results with input/output, error handling, and matching toolCallId
+- **Reasoning parts**: Internal AI reasoning steps that can be collapsed/expanded with streaming indicators
+- **Legacy tool parts**: Combined tool call/result information (deprecated but still supported for backward compatibility)
+
+Messages are loaded on-demand when switching chats. Streaming responses update the specific chat's messages in real-time with incremental part updates. Persistence uses Chrome local storage with separate keys for metadata and messages.
 
 ### Data Flow
 1. **User Input** → `PromptInput` → `handleSend` in `App.jsx`
-2. **AI Processing** → Direct API calls to OpenCode Zen endpoints via Vercel AI SDK
-3. **Real-time Streaming** → Updates specific chat's messages in `chatsData` with live text chunks
-4. **Persistence** → Auto-saves to Chrome storage on message changes (metadata + messages)
-5. **Chat Management** → CRUD operations via `chatStorage.js` utilities
-6. **Rich Rendering** → Streamdown processes Markdown and LaTeX in AI responses via AI Elements components
+2. **AI Processing** → Direct API calls to OpenCode Zen endpoints via Vercel AI SDK 5 with tool calling enabled
+3. **Real-time Streaming** → `consumeUIMessageStream()` yields incremental `UIMessage` objects with updated parts (text, tool-call, tool-result, reasoning)
+4. **UI Updates** → `renderMessageParts()` function handles complex message structures with specialized rendering for each part type
+5. **Tool Execution** → AI invokes tools during generation; results are streamed back and correlated via `toolCallId`
+6. **Reasoning Display** → Internal AI reasoning steps are captured in reasoning parts and displayed via collapsible `Reasoning` components
+7. **Persistence** → Auto-saves to Chrome storage on message changes (metadata + messages with all part types)
+8. **Chat Management** → CRUD operations via `chatStorage.js` utilities with on-demand message loading
+9. **Rich Rendering** → Streamdown processes Markdown and LaTeX in AI responses via AI Elements components, with specialized rendering for tool calls/results and reasoning
+
+### Advanced Message Rendering
+The `renderMessageParts` function in `App.jsx` handles complex message structures with multiple content types:
+- **Text Content**: Standard markdown and LaTeX rendering via `Response` component
+- **Tool Calls**: Interactive display showing function name, arguments, and execution state
+- **Tool Results**: Combined input/output display with error handling for failed tool executions
+- **Reasoning Steps**: Collapsible sections showing AI's internal thought process
+- **Streaming States**: Real-time updates during generation with appropriate loading indicators
+- **Error Handling**: Graceful degradation for unknown part types with debug information
 
 ### Project Structure
 ```
 src/
 ├── components/
-│   ├── ai-elements/       # Custom AI Elements UI components (Branch, Message, PromptInput, Response, etc.)
+│   ├── ai-elements/       # Custom AI Elements UI components (Branch, Message, PromptInput, Response, Tool, Reasoning, etc.)
 │   ├── settings/
 │   │   └── ModelSelector.jsx  # Model selection component
 │   ├── ui/                # shadcn UI components

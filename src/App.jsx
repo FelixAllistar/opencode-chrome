@@ -372,10 +372,10 @@ export default function App() {
 
   // Render mixed content message parts (text + tool calls/results)
   const renderMessageParts = (message) => {
-    const isStreaming = message.status === 'streaming';
+    const isOverallStreaming = message.status === 'streaming';
 
     if (!message.parts || message.parts.length === 0) {
-      if (isStreaming) {
+      if (isOverallStreaming) {
         return <div className="flex items-center gap-2 text-muted-foreground">
           <div className="animate-pulse">Thinking...</div>
         </div>;
@@ -393,7 +393,7 @@ export default function App() {
     });
 
     if (!displayableParts || displayableParts.length === 0) {
-      if (isStreaming) {
+      if (isOverallStreaming) {
         return <div className="flex items-center gap-2 text-muted-foreground">
           <div className="animate-pulse">Thinking...</div>
         </div>;
@@ -470,7 +470,7 @@ export default function App() {
           // Reasoning part
           if (part.type === 'reasoning') {
             return (
-              <Reasoning key={`reasoning-${index}`} isStreaming={isStreaming}>
+              <Reasoning key={`reasoning-${index}`} isStreaming={isOverallStreaming && index === displayableParts.length - 1}>
                 <ReasoningTrigger />
                 <ReasoningContent>{part.text}</ReasoningContent>
               </Reasoning>
@@ -489,7 +489,7 @@ export default function App() {
             </div>
           );
         })}
-        {isStreaming && (
+        {isOverallStreaming && (
           <div className="flex items-center gap-2 text-muted-foreground">
             <div className="animate-pulse">Generating...</div>
           </div>
