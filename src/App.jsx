@@ -1,4 +1,5 @@
-  import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { Plus, Settings } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
@@ -275,183 +276,49 @@ export default function App() {
     }));
 
     try {
-      console.log('🚀 Starting AI response generation...');
-
       // Enable tools by default
       const result = await generateResponse(selectedModel.id, selectedModel.type, messagesToSend, apiKey, {
         enableTools: true,
         system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
       });
 
-      console.log('📥 Got result from generateResponse:', result);
-      console.log('📥 Has textStream?', !!result.textStream);
-
       setChatsData(prev => ({
         ...prev,
         [chatId]: { ...prev[chatId], status: 'streaming' }
       }));
 
-      console.log('📊 Status set to streaming');
+      // Consume the UI message stream
+      for await (const uiMessage of result.consumeUIMessageStream()) {
+        // Check if generation was stopped
+        if (chatsDataRef.current[chatId]?.status !== 'streaming') {
+          break;
+        }
 
-       // Initialize AI message with empty parts array
-       let currentText = '';
-       const streamingToolParts = new Map(); // Track tool parts during streaming
-
-       // Stream the full response including tools
-       if (result.fullStream) {
-         console.log('🔄 Starting to iterate over fullStream...');
-         let streamCount = 0;
-
-         for await (const part of result.fullStream) {
-           streamCount++;
-           console.log(`📝 Stream part ${streamCount}:`, part);
-
-           // Check if generation was stopped
-           if (chatsDataRef.current[chatId]?.status !== 'streaming') {
-             console.log('⏹️ Generation was stopped, breaking out of stream');
-             break;
-           }
-
-           // Handle text streaming
-           if (typeof part === 'string') {
-             currentText += part;
-             console.log(`📄 Added string text, current length: ${currentText.length}`);
-           } else if (part && part.type === 'text') {
-             currentText += part.text;
-             console.log(`📄 Added text part, current length: ${currentText.length}`);
-           }
-
-            // Handle tool call streaming
-           else if (part && part.type === 'tool-call') {
-             console.log('🔧 Tool call streaming:', part);
-             console.log('🔧 Tool call input:', part.input, 'args:', part.args);
-             const toolPart = {
-               type: `tool-${part.toolName}`,
-               toolCallId: part.toolCallId,
-               toolName: part.toolName,
-               input: part.input || part.args,
-               state: 'input-available',
-               output: undefined,
-               errorText: undefined
-             };
-             console.log('🔧 Created tool part with input:', toolPart.input);
-             streamingToolParts.set(part.toolCallId, toolPart);
-           }
-
-           // Handle tool result streaming
-           else if (part && part.type === 'tool-result') {
-             console.log('🔧 Tool result streaming:', part);
-             const existingToolPart = streamingToolParts.get(part.toolCallId);
-             if (existingToolPart) {
-               existingToolPart.output = part.result;
-               existingToolPart.errorText = part.error;
-               existingToolPart.state = part.error ? 'output-error' : 'output-available';
-             }
-           }
-
-           // Build current parts for streaming update
-           const currentParts = [];
-           if (currentText) {
-             currentParts.push({ type: 'text', text: currentText });
-           }
-           currentParts.push(...streamingToolParts.values());
-
-           // Update state with streaming content
-           setChatsData(prev => {
-             console.log('💾 Updating state with streaming content...');
-             return {
-               ...prev,
-               [chatId]: {
-                 ...prev[chatId],
-                 messages: prev[chatId].messages.map(msg =>
-                   msg.id === aiMessageId
-                     ? { ...msg, parts: currentParts, status: 'streaming' }
-                     : msg
-                 )
-               }
-             };
-           });
-         }
-
-         console.log(`✅ Stream completed after ${streamCount} parts`);
-       } else {
-         console.log('❌ No fullStream found in result!');
-       }
-
-      // Get step data and final text from the result
-      const stepData = result.getStepData();
-      const finalText = result.getFinalText();
-
-      console.log('📋 Step data:', stepData);
-      console.log('📋 Final text:', finalText);
-
-      console.log('Step data from onStepFinish:', stepData);
-      console.log('Final text:', finalText);
-
-      // Build parts array from step data and final text using AI Elements format
-      const finalParts = [];
-      const toolParts = new Map(); // Map to combine tool calls and results by toolCallId
-
-      // Process each step to extract tool calls and results
-      for (const stepInfo of stepData) {
-        // Add tool calls from this step - combine with existing or create new
-        if (stepInfo.toolCalls && stepInfo.toolCalls.length > 0) {
-          for (const toolCall of stepInfo.toolCalls) {
-            console.log('🔧 Processing tool call:', toolCall);
-            console.log('🔧 Tool call input:', toolCall.input, 'args:', toolCall.args);
-            const toolPart = {
-              type: `tool-${toolCall.toolName}`,
-              toolCallId: toolCall.toolCallId,
-              toolName: toolCall.toolName,
-              input: toolCall.input || toolCall.args,
-              state: 'input-available',
-              output: undefined,
-              errorText: undefined
-            };
-            console.log('🔧 Created final tool part with input:', toolPart.input);
-            toolParts.set(toolCall.toolCallId, toolPart);
+        // Update the AI message with streaming parts
+        setChatsData(prev => ({
+          ...prev,
+          [chatId]: {
+            ...prev[chatId],
+            messages: prev[chatId].messages.map(msg =>
+              msg.id === aiMessageId
+                ? { ...msg, parts: uiMessage.parts, status: 'streaming' }
+                : msg
+            )
           }
-        }
-
-        // Update tool results for existing tool calls
-        if (stepInfo.toolResults && stepInfo.toolResults.length > 0) {
-          for (const toolResult of stepInfo.toolResults) {
-            const existingToolPart = toolParts.get(toolResult.toolCallId);
-            if (existingToolPart) {
-              existingToolPart.output = toolResult.result;
-              existingToolPart.errorText = toolResult.error;
-              existingToolPart.state = toolResult.error ? 'output-error' : 'output-available';
-            }
-          }
-        }
-
-        // Add any text from this step
-        if (stepInfo.text) {
-          finalParts.push({ type: 'text', text: stepInfo.text });
-        }
+        }));
       }
 
-      // Add all tool parts to final parts
-      finalParts.push(...toolParts.values());
-
-      // Add the final text response if not already included
-      if (finalText && !finalParts.some(part => part.type === 'text' && part.text === finalText)) {
-        finalParts.push({ type: 'text', text: finalText });
-      }
-
-      console.log('Final parts to render:', finalParts);
-
-      // Final state update
+      // Mark as completed
       setChatsData(prev => ({
         ...prev,
         [chatId]: {
           ...prev[chatId],
           status: 'ready',
           messages: prev[chatId].messages.map(msg =>
-            (msg.id === aiMessageId || msg.status === 'streaming') ? { ...msg, parts: finalParts, status: 'ready' } : msg
+            msg.id === aiMessageId ? { ...msg, status: 'ready' } : msg
           )
         }
-      }));
+       }));
 
     } catch (error) {
       console.error('Error generating response:', error);
@@ -504,6 +371,7 @@ export default function App() {
 
   // Render mixed content message parts (text + tool calls/results)
   const renderMessageParts = (message) => {
+    const isStreaming = message.status === 'streaming';
     console.log('Rendering message parts:', message.parts);
 
     if (!message.parts || message.parts.length === 0) {
@@ -520,7 +388,43 @@ export default function App() {
             return <Response key={`text-${index}`}>{part.text}</Response>;
           }
 
-          // Tool part - display combined tool call and result information
+          // Tool call part
+          if (part.type === 'tool-call') {
+            return (
+              <Tool key={`tool-call-${part.toolCallId}-${index}`} defaultOpen>
+                <ToolHeader
+                  type="tool-call"
+                  state="input-available"
+                  title={part.toolName}
+                />
+                <ToolContent>
+                  <ToolInput input={part.args} />
+                </ToolContent>
+              </Tool>
+            );
+          }
+
+          // Tool result part
+          if (part.type === 'tool-result') {
+            return (
+              <Tool key={`tool-result-${part.toolCallId}-${index}`} defaultOpen>
+                <ToolHeader
+                  type="tool-result"
+                  state={part.error ? "output-error" : "output-available"}
+                  title={part.toolName || 'Tool Result'}
+                />
+                <ToolContent>
+                  <ToolInput input={part.args} />
+                  <ToolOutput
+                    output={part.result}
+                    errorText={part.error}
+                  />
+                </ToolContent>
+              </Tool>
+            );
+          }
+
+          // Legacy tool part - display combined tool call and result information
           if (part.type.startsWith('tool-')) {
             return (
               <Tool key={`tool-${part.toolCallId}-${index}`} defaultOpen>
@@ -554,6 +458,11 @@ export default function App() {
             </div>
           );
         })}
+        {isStreaming && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <div className="animate-pulse">Generating...</div>
+          </div>
+        )}
       </div>
     );
   };

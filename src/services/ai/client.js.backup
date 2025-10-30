@@ -94,7 +94,6 @@ export const generateResponse = async (modelId, type, messages, apiKey, options 
           stream: result.toUIMessageStream(),
         });
       },
-      getFinalText: () => {
         console.log('📝 getFinalText called, returning:', finalText);
         return finalText;
       }
