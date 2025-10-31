@@ -9,7 +9,7 @@ NEVER run pnpm build or pnpm run dev. the user will be responsible for building.
 - **Lint/Typecheck**: No linting or type checking scripts defined
 
 ## Code Style
-- **Imports**: ES6 imports with .js extensions (even for JSX files)
+- **Imports**: ES6 imports with proper file extensions (.js, .jsx, .ts, .tsx) and @/ path aliases (@/lib/utils → src/lib/utils)
 - **Naming**: camelCase for variables/functions, PascalCase for components/types
 - **Components**: Arrow functions with prop destructuring
 - **Types**: TypeScript interfaces in PascalCase
@@ -105,6 +105,8 @@ The error handling system is designed to provide robust error management while m
 
 ### Project Structure (High-Level Overview)
 ```
+lib/
+├── utils.js               # Additional utility functions
 src/
 ├── components/
 │   ├── ai-elements/       # Custom AI Elements UI components (Branch, Message, PromptInput, Response, Tool, Reasoning, etc.)
