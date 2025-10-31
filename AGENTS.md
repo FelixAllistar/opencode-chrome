@@ -15,7 +15,7 @@ NEVER run pnpm build or pnpm run dev. the user will be responsible for building.
 - **Types**: TypeScript interfaces in PascalCase
 - **Styling**: Tailwind CSS utility classes
 - **File Extensions**: .jsx for React components, .js for utilities, .ts for types
-- **Error Handling**: Basic try/catch in async functions, status-based UI feedback
+- **Error Handling**: Centralized error formatting and filtering via errorHandling.ts utilities
 - **Formatting**: No formatter configured - follow existing patterns
 
 ## Architecture
@@ -23,8 +23,9 @@ NEVER run pnpm build or pnpm run dev. the user will be responsible for building.
 ### Core Components
 - **`App.jsx`**: Main application with chat management, UI state, and advanced message rendering for tool calls and reasoning
 - **`AppSidebar.tsx`**: Custom sidebar component for chat navigation and management
-- **`messageUtils.js`**: Utilities for converting between internal message format and AI Elements UIMessage format
 - **`chatStorage.js`**: Chrome storage utilities for persistence
+- **`errorHandling.ts`**: Centralized error formatting, filtering, and handling utilities
+- **`lib/utils.ts`**: Utility functions for className merging with clsx and tailwind-merge
 
 ### Key Technologies
 - **React 19.2**: Modern React with hooks for state management
@@ -36,7 +37,7 @@ NEVER run pnpm build or pnpm run dev. the user will be responsible for building.
 - **Vite**: Fast build tool and development server for the browser extension
 
 ### Theme System
-- **Theme Definitions**: 24 themes with comprehensive color schemes for backgrounds, text, borders, syntax highlighting, markdown, and diffs. Each theme is maintained in its own file under `src/utils/themes/` (e.g., `zenburn.js`, `dracula.js`) for better organization and maintainability
+- **Theme Definitions**: 23 themes with comprehensive color schemes for backgrounds, text, borders, syntax highlighting, markdown, and diffs. Each theme is maintained in its own file under `src/utils/themes/` (e.g., `zenburn.js`, `dracula.js`) for better organization and maintainability
 - **Main Export**: `src/utils/themes.js` imports all individual theme files and exports them as a `THEMES` object
 - **Color Mapping**: `THEME_VARIABLES` in `src/utils/themes.js` maps theme color keys to CSS custom properties used by Tailwind classes (--primary → accent colors for buttons, --card → backgroundElement for cards, --popover → backgroundElement, --muted → backgroundPanel, --input → backgroundElement, etc.)
 - **State Management**: `ThemeProvider` in `src/contexts/ThemeProvider.jsx` manages theme state with persistence via `useStorage` hook
@@ -66,14 +67,16 @@ Messages are loaded on-demand when switching chats. Streaming responses update t
 
 ### Data Flow
 1. **User Input** → `PromptInput` → `handleSend` in `App.jsx`
-2. **AI Processing** → Direct API calls to OpenCode Zen endpoints via Vercel AI SDK 5 with tool calling enabled
-3. **Real-time Streaming** → `consumeUIMessageStream()` yields incremental `UIMessage` objects with updated parts (text, tool-call, tool-result, reasoning)
-4. **UI Updates** → `renderMessageParts()` function handles complex message structures with specialized rendering for each part type
-5. **Tool Execution** → AI invokes tools during generation; results are streamed back and correlated via `toolCallId`
-6. **Reasoning Display** → Internal AI reasoning steps are captured in reasoning parts and displayed via collapsible `Reasoning` components
-7. **Persistence** → Auto-saves to Chrome storage on message changes (metadata + messages with all part types)
-8. **Chat Management** → CRUD operations via `chatStorage.js` utilities with on-demand message loading
-9. **Rich Rendering** → Streamdown processes Markdown and LaTeX in AI responses via AI Elements components, with specialized rendering for tool calls/results and reasoning
+2. **Message Filtering** → `filterMessagesForAPI()` excludes error messages from conversation history sent to API
+3. **AI Processing** → Direct API calls to OpenCode Zen endpoints via Vercel AI SDK 5 with tool calling enabled
+4. **Real-time Streaming** → `consumeUIMessageStream()` yields incremental `UIMessage` objects with updated parts (text, tool-call, tool-result, reasoning)
+5. **UI Updates** → `renderMessageParts()` function handles complex message structures with specialized rendering for each part type
+6. **Error Handling** → `createErrorForUI()` formats errors for display, `createUnhandledRejectionHandler()` manages uncaught errors
+7. **Tool Execution** → AI invokes tools during generation; results are streamed back and correlated via `toolCallId`
+8. **Reasoning Display** → Internal AI reasoning steps are captured in reasoning parts and displayed via collapsible `Reasoning` components
+9. **Persistence** → Auto-saves to Chrome storage on message changes (metadata + messages with all part types)
+10. **Chat Management** → CRUD operations via `chatStorage.js` utilities with on-demand message loading
+11. **Rich Rendering** → Streamdown processes Markdown and LaTeX in AI responses via AI Elements components, with specialized rendering for tool calls/results and reasoning
 
 ### Advanced Message Rendering
 The `renderMessageParts` function in `App.jsx` handles complex message structures with multiple content types:
@@ -81,23 +84,38 @@ The `renderMessageParts` function in `App.jsx` handles complex message structure
 - **Tool Calls**: Interactive display showing function name, arguments, and execution state
 - **Tool Results**: Combined input/output display with error handling for failed tool executions
 - **Reasoning Steps**: Collapsible sections showing AI's internal thought process
+- **Error Display**: Red error cards for failed operations using `createErrorForUI()` formatting
 - **Streaming States**: Real-time updates during generation with appropriate loading indicators
-- **Error Handling**: Graceful degradation for unknown part types with debug information
+- **Graceful Degradation**: Debug information for unknown part types
 
-### Project Structure
+### Error Handling Architecture
+
+The error handling system is designed to provide robust error management while maintaining clean API communication:
+
+- **`formatAIError()`**: Formats AI SDK errors into user-friendly messages based on error types (APICallError, NoOutputGeneratedError, etc.)
+- **`createErrorForUI()`**: Creates standardized error objects for UI display with consistent structure
+- **`filterMessagesForAPI()`**: Filters out error messages from conversation history sent to the API to prevent 422 rejections
+- **`createUnhandledRejectionHandler()`**: Manages uncaught promise rejections and displays them in the UI
+
+**Error Flow**:
+1. **Streaming Errors** → Caught by `onError` callback → Yielded as error parts → Thrown in stream loop → Formatted and displayed
+2. **Setup Errors** → Caught in outer try/catch → Formatted and displayed
+3. **Unhandled Errors** → Caught by global handler → Added to last AI message
+4. **API Filtering** → Error messages excluded from conversation history sent to models
+
+### Project Structure (High-Level Overview)
 ```
 src/
 ├── components/
 │   ├── ai-elements/       # Custom AI Elements UI components (Branch, Message, PromptInput, Response, Tool, Reasoning, etc.)
-│   ├── settings/
-│   │   └── ModelSelector.jsx  # Model selection component
+│   ├── settings/          # Settings components (ModelSelector, ThemeSwitcher)
 │   ├── ui/                # shadcn UI components
 │   └── app-sidebar.tsx    # Custom sidebar component for chat navigation and management
 ├── hooks/
 │   ├── use-mobile.ts      # Mobile detection hook
 │   └── useStorage.js      # Chrome storage hook
 ├── lib/
-│   └── utils.ts           # Utility functions
+│   └── utils.ts           # Utility functions for className merging
 ├── services/
 │   └── ai/
 │       ├── client.js      # AI SDK integration
@@ -108,7 +126,7 @@ src/
 ├── utils/
 │   ├── chatStorage.js     # Chat persistence utilities
 │   ├── constants.js       # App constants
-│   └── messageUtils.js    # Message format conversion utilities
+│   └── errorHandling.ts   # Centralized error formatting and filtering utilities
 ├── App.jsx                # Main application
 ├── background.js          # Extension background service worker
 ├── index.css              # Global styles
