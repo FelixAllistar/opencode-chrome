@@ -514,6 +514,7 @@ export default function App() {
 
     const chainOfThoughtSteps = [];
     const textParts = [];
+    let lastToolCall = null;
 
     parts.forEach((part, index) => {
       if (part.type === 'reasoning') {
@@ -525,29 +526,110 @@ export default function App() {
           content: part.text
         });
       } else if (part.type === 'tool-call') {
+        const toolName = part.toolName || 'Unknown tool';
+        const description = part.args?.url
+          ? `Fetching: ${part.args.url}`
+          : `Calling ${toolName} with: ${JSON.stringify(part.args || {}).substring(0, 100)}...`;
+
         chainOfThoughtSteps.push({
-          label: `Using ${part.toolName}`,
-          description: `Calling tool with: ${JSON.stringify(part.args)}`,
+          label: `Using ${toolName}`,
+          description,
           status: 'complete',
-          icon: SearchIcon
+          icon: SearchIcon,
+          searchResults: part.args?.url ? [part.args.url] : undefined
         });
-      } else if (part.type === 'tool-result') {
+
+        lastToolCall = part; // Remember the tool call for potential result pairing
+      } else if (part.type === 'tool-result' || part.type?.startsWith('tool-')) {
+        // Try multiple sources for the tool name
+        const toolName = part.toolName ||
+                          part.args?.toolName ||
+                          lastToolCall?.toolName ||
+                          (part.type?.startsWith('tool-') ? part.type.replace('tool-', '') : null) ||
+                          'Tool';
+
         if (part.error) {
           chainOfThoughtSteps.push({
-            label: `Tool Error`,
+            label: `${toolName} Error`,
             description: part.error,
             status: 'complete',
             icon: SearchIcon
           });
         } else {
-          chainOfThoughtSteps.push({
-            label: `Tool Result`,
-            description: 'Got results from tool',
+          // Extract URL from various possible locations
+          const searchResults = [];
+          let url = null;
+
+          if (part.result?.url) {
+            url = part.result.url;
+            searchResults.push(url);
+          } else if (part.args?.url) {
+            url = part.args.url;
+            searchResults.push(url);
+          } else if (lastToolCall?.args?.url) {
+            url = lastToolCall.args.url;
+            searchResults.push(url);
+          }
+
+          // Create a more descriptive result label and description
+          let resultLabel = `${toolName} Result`;
+          let resultDescription = 'Successfully retrieved data';
+
+          if (part.result?.status === 200) {
+            resultLabel = `${toolName} Success`;
+            if (url) {
+              resultDescription = `Successfully fetched ${url}`;
+            } else {
+              resultDescription = `Fetched ${part.result.contentLength || 0} bytes`;
+            }
+          } else if (part.result?.error) {
+            resultLabel = `${toolName} Error`;
+            resultDescription = part.result.error;
+          } else if (part.output || part.result) {
+            resultLabel = `${toolName} Complete`;
+            if (url) {
+              resultDescription = `Retrieved data from ${url}`;
+            } else {
+              resultDescription = 'Operation completed successfully';
+            }
+          }
+
+          const stepData = {
+            label: resultLabel,
+            description: resultDescription,
             status: 'complete',
             icon: SearchIcon,
-            searchResults: part.args?.url ? [part.args.url] : undefined
-          });
+            searchResults: searchResults.length > 0 ? searchResults : undefined
+          };
+
+          // Add result content as custom content for debugging
+          if (part.result || part.output) {
+            stepData.content = (
+              <div className="text-xs text-muted-foreground mt-2">
+                <details>
+                  <summary className="cursor-pointer">Debug info</summary>
+                  <div className="mt-1 space-y-2">
+                    <div><strong>Tool:</strong> {toolName}</div>
+                    {url && <div><strong>URL:</strong> {url}</div>}
+                    {part.result?.status && <div><strong>Status:</strong> {part.result.status}</div>}
+                    <details>
+                      <summary className="cursor-pointer text-xs">Raw result data</summary>
+                      <pre className="mt-1 p-2 bg-muted rounded text-xs overflow-x-auto">
+                        {typeof (part.result || part.output) === 'string'
+                          ? (part.result || part.output).substring(0, 500) + ((part.result || part.output).length > 500 ? '...' : '')
+                          : JSON.stringify(part.result || part.output, null, 2).substring(0, 500) + '...'
+                        }
+                      </pre>
+                    </details>
+                  </div>
+                </details>
+              </div>
+            );
+          }
+
+          chainOfThoughtSteps.push(stepData);
         }
+        lastToolCall = null; // Reset tool call reference
       } else if (part.type === 'text') {
         textParts.push(part);
       }
