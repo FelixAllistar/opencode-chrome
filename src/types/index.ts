@@ -1,21 +1,35 @@
-// Current message structure used throughout the app
-export interface MessagePart {
-  type: 'text' | 'tool-call' | 'tool-result' | 'reasoning' | string;
-  text?: string;
-  toolCallId?: string;
+import { LucideIcon } from 'lucide-react';
+import { ReactNode } from 'react';
+
+// Chain of thought step data structure
+export interface ChainOfThoughtStep {
+  label: string;
+  description?: string;
+  status: 'complete' | 'active' | 'pending';
+  icon?: string | LucideIcon;
+  searchResults?: string[];
+  image?: {
+    src: string;
+    alt: string;
+    caption?: string;
+  };
+  content?: ReactNode;
   toolName?: string;
-  args?: any;
-  result?: any;
-  error?: string;
-  input?: any;
-  output?: any;
-  errorText?: string;
-  state?: string;
+  toolArgs?: any;
+  toolResult?: any;
 }
 
+// Simplified message part types
+export interface MessagePart {
+  type: 'text' | 'chain-of-thought' | 'user';
+  text?: string;
+  steps?: ChainOfThoughtStep[];
+}
+
+// Simplified message structure
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant';
   parts: MessagePart[];
   status?: 'ready' | 'streaming' | 'submitted' | 'error';
 }

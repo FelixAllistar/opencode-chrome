@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { Plus, Settings, BrainIcon, SearchIcon } from 'lucide-react';
+import { Plus, Settings } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
 
@@ -50,15 +50,8 @@ import {
   MessageAvatar,
   MessageContent,
 } from './components/ai-elements/message.tsx';
-import {
-  ChainOfThought,
-  ChainOfThoughtHeader,
-  ChainOfThoughtContent,
-  ChainOfThoughtStep,
-  ChainOfThoughtSearchResults,
-  ChainOfThoughtSearchResult,
-  ChainOfThoughtImage,
-} from './components/ai-elements/chain-of-thought.tsx';
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from './components/ai-elements/tool.tsx';
+import { Reasoning, ReasoningTrigger, ReasoningContent } from './components/ai-elements/reasoning.tsx';
 import { THEMES, THEME_VARIABLES } from './utils/themes.js';
 import {
   PromptInput,
@@ -498,150 +491,131 @@ export default function App() {
   };
 
   // Render mixed content message parts (text + tool calls/results)
-  // Convert legacy parts to chain-of-thought format
-  const convertLegacyPartsToChainOfThought = (parts) => {
-    // Check if we have any tool/reasoning parts that need conversion
-    const hasLegacyParts = parts.some(part =>
-      part.type === 'reasoning' ||
-      part.type === 'tool-call' ||
-      part.type === 'tool-result' ||
-      part.type?.startsWith('tool-')
-    );
+  const renderMessageParts = (message) => {
+    const isOverallStreaming = message.status === 'streaming';
 
-    if (!hasLegacyParts) {
-      return parts; // Return as-is if no legacy parts
+    if (!message.parts || message.parts.length === 0) {
+      if (isOverallStreaming) {
+        return <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="animate-pulse">Thinking...</div>
+        </div>;
+      }
+      return <Response />;
     }
 
-    const chainOfThoughtSteps = [];
-    const textParts = [];
-
-    parts.forEach((part, index) => {
-      if (part.type === 'reasoning') {
-        chainOfThoughtSteps.push({
-          label: 'Thinking',
-          description: 'Analyzing the request',
-          status: index < parts.length - 1 ? 'complete' : 'active',
-          icon: BrainIcon,
-          content: part.text
-        });
-      } else if (part.type === 'tool-call') {
-        chainOfThoughtSteps.push({
-          label: `Using ${part.toolName}`,
-          description: `Calling tool with: ${JSON.stringify(part.args)}`,
-          status: 'complete',
-          icon: SearchIcon
-        });
-      } else if (part.type === 'tool-result') {
-        if (part.error) {
-          chainOfThoughtSteps.push({
-            label: `Tool Error`,
-            description: part.error,
-            status: 'complete',
-            icon: SearchIcon
-          });
-        } else {
-          chainOfThoughtSteps.push({
-            label: `Tool Result`,
-            description: 'Got results from tool',
-            status: 'complete',
-            icon: SearchIcon,
-            searchResults: part.args?.url ? [part.args.url] : undefined
-          });
-        }
-      } else if (part.type === 'text') {
-        textParts.push(part);
+    // Filter out internal/system part types that shouldn't be displayed
+    const displayableParts = message.parts.filter(part => {
+      // Skip internal AI SDK part types
+      if (part.type === 'step-start' || part.type === 'step-end' || part.type === 'step-finish') {
+        return false;
       }
+      return true;
     });
 
-    // If we have chain-of-thought steps, create a chain-of-thought part
-    if (chainOfThoughtSteps.length > 0) {
-      const chainOfThoughtPart = {
-        type: 'chain-of-thought',
-        steps: chainOfThoughtSteps
-      };
-      // Return chain-of-thought part followed by any text parts
-      return [chainOfThoughtPart, ...textParts];
-    }
-
-    return parts; // Return original parts if no conversion needed
-  };
-
-  const renderMessageParts = (message) => {
-    if (!message.parts || message.parts.length === 0) {
-      return message.status === 'streaming' ? (
-        <div className="flex items-center gap-2 text-muted-foreground">
+    if (!displayableParts || displayableParts.length === 0) {
+      if (isOverallStreaming) {
+        return <div className="flex items-center gap-2 text-muted-foreground">
           <div className="animate-pulse">Thinking...</div>
-        </div>
-      ) : (
-        <Response />
-      );
+        </div>;
+      }
+      return <Response />;
     }
-
-    // Convert legacy parts to chain-of-thought format
-    const convertedParts = convertLegacyPartsToChainOfThought(message.parts);
 
     return (
       <div className="space-y-4">
-        {convertedParts.map((part, index) => {
-          // User message
-          if (part.type === 'user') {
-            return (
-              <div key={`user-${index}`} className="font-medium">
-                {part.text}
-              </div>
-            );
-          }
-
-          // Chain of thought part
-          if (part.type === 'chain-of-thought' && part.steps) {
-            return (
-              <ChainOfThought key={`chain-of-thought-${index}`} defaultOpen={false}>
-                <ChainOfThoughtHeader>
-                  Chain of Thought
-                </ChainOfThoughtHeader>
-                <ChainOfThoughtContent>
-                  {part.steps.map((step, stepIndex) => (
-                    <ChainOfThoughtStep
-                      key={stepIndex}
-                      icon={step.icon}
-                      label={step.label}
-                      description={step.description}
-                      status={step.status}
-                    >
-                      {/* Show search results if available */}
-                      {step.searchResults && step.searchResults.length > 0 && (
-                        <ChainOfThoughtSearchResults>
-                          {step.searchResults.map((url, urlIndex) => (
-                            <ChainOfThoughtSearchResult key={urlIndex}>
-                              {url}
-                            </ChainOfThoughtSearchResult>
-                          ))}
-                        </ChainOfThoughtSearchResults>
-                      )}
-
-                      {/* Show image if available */}
-                      {step.image && (
-                        <ChainOfThoughtImage caption={step.image.caption}>
-                          <img
-                            src={step.image.src}
-                            alt={step.image.alt}
-                            className="max-w-full h-auto rounded"
-                          />
-                        </ChainOfThoughtImage>
-                      )}
-
-                      {/* Show custom content */}
-                      {step.content && step.content}
-                    </ChainOfThoughtStep>
-                  ))}
-                </ChainOfThoughtContent>
-              </ChainOfThought>
-            );
-          }
-
+        {displayableParts.map((part, index) => {
           // Text part - use Response component for markdown rendering
           if (part.type === 'text') {
             return <Response key={`text-${index}`}>{part.text}</Response>;
+          }
+
+          // Tool call part
+          if (part.type === 'tool-call') {
+            return (
+              <Tool key={`tool-call-${part.toolCallId}-${index}`} defaultOpen={false}>
+                <ToolHeader
+                  type="tool-call"
+                  state="input-available"
+                  title={part.toolName}
+                />
+                <ToolContent>
+                  <ToolInput input={part.args} />
+                </ToolContent>
+              </Tool>
+            );
+          }
+
+          // Tool result part
+          if (part.type === 'tool-result') {
+            const hasError = Boolean(part.error || part.errorDetails);
+            const errorText = part.errorDetails ? `${part.error}\n\n${part.errorDetails}` : part.error;
+
+            // If this is an error, show a simple red card with just the error message
+            if (hasError) {
+              return (
+                <div key={`tool-result-${part.toolCallId}-${index}`} className="p-4 bg-red-50 border border-red-200 rounded-lg my-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                    <div className="text-red-700 text-sm">
+                      {part.error}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            // For non-error tool results, keep the original Tool component
+            return (
+              <Tool key={`tool-result-${part.toolCallId}-${index}`} defaultOpen={false}>
+                <ToolHeader
+                  type="tool-result"
+                  state="output-available"
+                  title={part.toolName || 'Tool Result'}
+                />
+                <ToolContent>
+                  <ToolInput input={part.args} />
+                  <ToolOutput
+                    output={part.result}
+                  />
+                </ToolContent>
+              </Tool>
+            );
+          }
+
+          // Legacy tool part - display combined tool call and result information
+          if (part.type.startsWith('tool-')) {
+            return (
+              <Tool key={`tool-${part.toolCallId}-${index}`} defaultOpen={false}>
+                <ToolHeader
+                  type={part.type}
+                  state={part.state || "input-available"}
+                  title={part.toolName}
+                />
+                <ToolContent>
+                  <ToolInput input={part.input} />
+                  {(part.output !== undefined || part.errorText) && (
+                    <ToolOutput
+                      output={part.output}
+                      errorText={part.errorText}
+                    />
+                  )}
+                </ToolContent>
+              </Tool>
+            );
+          }
+
+          // Reasoning part
+          if (part.type === 'reasoning') {
+            return (
+              <Reasoning key={`reasoning-${index}`} isStreaming={isOverallStreaming && index === displayableParts.length - 1}>
+                <ReasoningTrigger />
+                <ReasoningContent>{part.text}</ReasoningContent>
+              </Reasoning>
+            );
           }
 
           // Unknown part type - render as raw JSON for debugging
@@ -656,7 +630,7 @@ export default function App() {
             </div>
           );
         })}
-        {message.status === 'streaming' && (
+        {isOverallStreaming && (
           <div className="flex items-center gap-2 text-muted-foreground">
             <div className="animate-pulse">Generating...</div>
           </div>

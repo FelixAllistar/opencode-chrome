@@ -2,6 +2,67 @@ import { streamText, convertToModelMessages, stepCountIs, readUIMessageStream } 
 import { getProvider } from './providers.js';
 import { getTools } from './tools.js';
 
+// Import icons for chain-of-thought steps
+import { SearchIcon, BrainIcon, CodeIcon, ImageIcon } from 'lucide-react';
+
+/**
+ * Convert AI step data into chain-of-thought format
+ */
+function convertStepsToChainOfThought(steps) {
+  return steps.map((step, index) => {
+    let chainStep = {
+      label: '',
+      description: '',
+      status: index < steps.length - 1 ? 'complete' : 'active',
+      icon: BrainIcon,
+    };
+
+    // Handle different step types
+    if (step.stepType === 'tool-call') {
+      const toolCall = step.toolCalls[0];
+      if (toolCall) {
+        chainStep.label = `Using ${toolCall.toolName}`;
+        chainStep.description = toolCall.args?.url || 'Processing request...';
+
+        // Set appropriate icon based on tool
+        if (toolCall.toolName === 'webFetch') {
+          chainStep.icon = SearchIcon;
+          chainStep.searchResults = [toolCall.args?.url].filter(Boolean);
+        } else if (toolCall.toolName === 'analyzeCode') {
+          chainStep.icon = CodeIcon;
+        }
+
+        // Add tool args and results
+        chainStep.toolName = toolCall.toolName;
+        chainStep.toolArgs = toolCall.args;
+      }
+    } else if (step.stepType === 'text' || step.text) {
+      // Handle reasoning/text steps
+      const text = step.text || '';
+      if (text.trim()) {
+        chainStep.label = text.length > 50 ? text.substring(0, 50) + '...' : text;
+        chainStep.description = 'Thinking...';
+        chainStep.icon = BrainIcon;
+      }
+    } else if (step.stepType === 'tool-result') {
+      const toolResult = step.toolResults[0];
+      if (toolResult) {
+        chainStep.label = `Completed ${toolResult.toolName || 'tool'}`;
+        chainStep.description = 'Processing result...';
+        chainStep.icon = BrainIcon;
+        chainStep.toolResult = toolResult.result;
+
+        // Add search results if it's a web fetch result
+        if (toolResult.result?.url) {
+          chainStep.searchResults = [toolResult.result.url];
+        }
+      }
+    }
+
+    return chainStep;
+  });
+}
+
 export const generateResponse = async (modelId, type, messages, apiKey, options = {}) => {
   const model = getProvider(modelId, type, apiKey);
   const tools = options.enableTools ? getTools() : undefined;
@@ -26,15 +87,16 @@ export const generateResponse = async (modelId, type, messages, apiKey, options 
       ...(options.maxTokens && { maxTokens: options.maxTokens }),
       // Handle each step completion including tool calls
       onStepFinish: (result) => {
-        // Capture step data for UI rendering
-        stepData.push({
+        // Transform step data into chain-of-thought format
+        const chainOfThoughtStep = {
           stepType: result.stepType,
           finishReason: result.finishReason,
           text: result.text,
           toolCalls: result.toolCalls || [],
           toolResults: result.toolResults || [],
           usage: result.usage
-        });
+        };
+        stepData.push(chainOfThoughtStep);
       },
       // Handle final completion
       onFinish: ({ text, toolCalls, toolResults, finishReason, usage, steps }) => {
