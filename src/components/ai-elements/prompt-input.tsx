@@ -790,12 +790,15 @@ export const PromptInputBody = ({
 
 export type PromptInputTextareaProps = ComponentProps<
   typeof InputGroupTextarea
->;
+> & {
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
+};
 
 export const PromptInputTextarea = ({
   onChange,
   className,
   placeholder = "What would you like to know?",
+  inputRef,
   ...props
 }: PromptInputTextareaProps) => {
   const controller = useOptionalPromptInputController();
@@ -866,6 +869,7 @@ export const PromptInputTextarea = ({
 
   return (
     <InputGroupTextarea
+      ref={inputRef}
       className={cn("field-sizing-content max-h-48 min-h-16", className)}
       name="message"
       onCompositionEnd={() => setIsComposing(false)}

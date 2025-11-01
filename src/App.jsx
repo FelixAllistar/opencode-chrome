@@ -71,6 +71,7 @@ import {
 
 
 
+
 export default function App() {
   const [chatsData, setChatsData] = useState({});
   const [currentChatId, setCurrentChatIdState] = useState(null);
@@ -85,6 +86,7 @@ export default function App() {
   const [isDark, setIsDark] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const inputRef = useRef(null);
 
   // Handle unhandled promise rejections at the app level
   useEffect(() => {
@@ -100,6 +102,8 @@ export default function App() {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
   }, [currentChatId, chatsData, setChatsData]);
+
+
 
   // Apply theme immediately for loading screen
   useEffect(() => {
@@ -171,7 +175,7 @@ export default function App() {
         activeChatId = chatsList[0].id;
         await setCurrentChatId(activeChatId);
       }
-      
+
         if (activeChatId && newChatsData[activeChatId]) {
           const chatMessages = await loadChatMessages(activeChatId);
           // Reset any streaming/submitted statuses since they can't persist across app restarts
@@ -190,9 +194,21 @@ export default function App() {
     loadInitialData();
   }, []);
 
+  // Focus input when initial data loading completes and we have a current chat
+  useEffect(() => {
+    if (!isInitialDataLoading && currentChatId && inputRef.current) {
+      // Small delay to ensure DOM is fully rendered
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 100);
+    }
+  }, [isInitialDataLoading, currentChatId]);
+
   const createNewChat = async () => {
     const newChatMetadata = await createChat();
-    
+
     setChatsData(prev => ({
       ...prev,
       [newChatMetadata.id]: {
@@ -204,6 +220,14 @@ export default function App() {
 
     setCurrentChatIdState(newChatMetadata.id);
     await setCurrentChatId(newChatMetadata.id);
+
+    // Focus the input after creating new chat
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 0);
+
     return newChatMetadata.id;
   };
 
@@ -229,6 +253,13 @@ export default function App() {
         }
       }));
     }
+
+    // Focus the input after switching chat
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 100);
   };
 
   const deleteChatById = async (chatId) => {
@@ -767,10 +798,10 @@ export default function App() {
 
                {/* Prompt input - fixed at bottom */}
                <div className="border-t bg-background p-4">
-                 <PromptInput onSubmit={handleSend}>
-                   <PromptInputBody>
-                     <PromptInputTextarea />
-                   </PromptInputBody>
+                  <PromptInput onSubmit={handleSend}>
+                    <PromptInputBody>
+                      <PromptInputTextarea inputRef={inputRef} />
+                    </PromptInputBody>
                    <PromptInputFooter>
                      <PromptInputTools>
                        <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
