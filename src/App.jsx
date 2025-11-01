@@ -532,7 +532,7 @@ export default function App() {
           // Tool call part
           if (part.type === 'tool-call') {
             return (
-              <Tool key={`tool-call-${part.toolCallId}-${index}`} defaultOpen>
+              <Tool key={`tool-call-${part.toolCallId}-${index}`} defaultOpen={false}>
                 <ToolHeader
                   type="tool-call"
                   state="input-available"
@@ -570,7 +570,7 @@ export default function App() {
 
             // For non-error tool results, keep the original Tool component
             return (
-              <Tool key={`tool-result-${part.toolCallId}-${index}`} defaultOpen>
+              <Tool key={`tool-result-${part.toolCallId}-${index}`} defaultOpen={false}>
                 <ToolHeader
                   type="tool-result"
                   state="output-available"
@@ -589,7 +589,7 @@ export default function App() {
           // Legacy tool part - display combined tool call and result information
           if (part.type.startsWith('tool-')) {
             return (
-              <Tool key={`tool-${part.toolCallId}-${index}`} defaultOpen>
+              <Tool key={`tool-${part.toolCallId}-${index}`} defaultOpen={false}>
                 <ToolHeader
                   type={part.type}
                   state={part.state || "input-available"}
