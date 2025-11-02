@@ -523,7 +523,11 @@ export default function App() {
           description: 'Analyzing the request',
           status: index < parts.length - 1 ? 'complete' : 'active',
           icon: BrainIcon,
-          content: part.text
+          content: (
+            <div className="text-sm text-muted-foreground w-full overflow-x-auto whitespace-pre-wrap break-words">
+              {part.text}
+            </div>
+          )
         });
       } else if (part.type === 'tool-call') {
         const toolName = part.toolName || 'Unknown tool';
