@@ -58,24 +58,24 @@ export const createErrorForUI = (error: Error, toolCallId: string = 'error'): Er
   };
 };
 
-/**
- * Filters messages for API consumption, excluding error messages
- */
-export const filterMessagesForAPI = (messages: any[]): any[] => {
-  return messages.filter(message => {
-    // Exclude messages with error status
-    if (message.status === 'error') {
-      return false;
-    }
+  /**
+   * Filters messages for API consumption, excluding error messages
+   */
+  export const filterMessagesForAPI = (messages: any[]): any[] => {
+    return messages.filter(message => {
+      // Exclude messages with error status
+      if (message.status === 'error') {
+        return false;
+      }
 
-    // Exclude messages that have error parts
-    if (message.parts?.some((part: any) => part.type === 'tool-result' && part.error)) {
-      return false;
-    }
+      // Exclude messages that have error parts
+      if (message.parts?.some((part: any) => part.type?.startsWith('tool-') && part.state === 'output-error')) {
+        return false;
+      }
 
-    return true;
-  });
-};
+      return true;
+    });
+  };
 
 /**
  * Creates an unhandled promise rejection handler for AI SDK errors
@@ -104,7 +104,7 @@ export const createUnhandledRejectionHandler = (
         const lastAiMessage = [...messages].reverse().find((msg: any) => msg.role === 'assistant');
 
         // Skip if the last AI message already has an error
-        const hasError = lastAiMessage?.parts?.some((part: any) => part.type === 'tool-result' && part.error);
+        const hasError = lastAiMessage?.parts?.some((part: any) => part.type?.startsWith('tool-') && part.state === 'output-error');
         if (lastAiMessage && !hasError) {
           flushSync(() => setChatsData((prev: any) => ({
             ...prev,
@@ -117,7 +117,10 @@ export const createUnhandledRejectionHandler = (
                       ...msg,
                       status: 'error',
                       parts: [{
-                        type: 'tool-result',
+                        type: 'tool-error',
+                        state: 'output-error',
+                        toolCallId: 'error',
+                        errorText: errorForUI.error,
                         ...errorForUI
                       }]
                     }

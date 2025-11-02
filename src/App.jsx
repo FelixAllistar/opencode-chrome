@@ -431,16 +431,11 @@ export default function App() {
                     ...msg,
                     status: 'error',
                     parts: [{
-                      type: 'tool-result',
-                      toolName: errorForUI.toolName,
-                      args: errorForUI.args,
-                      result: errorForUI.result,
-                      error: errorForUI.error,
-                      errorDetails: errorForUI.errorDetails,
-                      errorCategory: errorForUI.errorCategory,
-                      shouldRetry: errorForUI.shouldRetry,
-                      retryDelay: errorForUI.retryDelay,
-                      toolCallId: 'error'
+                      type: 'tool-error',
+                      state: 'output-error',
+                      toolCallId: 'error',
+                      errorText: errorForUI.error,
+                      ...errorForUI
                     }]
                   }
                 : msg
@@ -469,16 +464,11 @@ export default function App() {
                   ...msg,
                   status: 'error',
                   parts: [{
-                    type: 'tool-result',
-                    toolName: errorForUI.toolName,
-                    args: errorForUI.args,
-                    result: errorForUI.result,
-                    error: errorForUI.error,
-                    errorDetails: errorForUI.errorDetails,
-                    errorCategory: errorForUI.errorCategory,
-                    shouldRetry: errorForUI.shouldRetry,
-                    retryDelay: errorForUI.retryDelay,
-                    toolCallId: 'error'
+                    type: 'tool-error',
+                    state: 'output-error',
+                    toolCallId: 'error',
+                    errorText: errorForUI.error,
+                    ...errorForUI
                   }]
                 }
               : msg
@@ -522,11 +512,10 @@ export default function App() {
 
   // Convert AI SDK 5.0 parts to chain-of-thought format
   const convertPartsToChainOfThought = (parts) => {
-    // Check if we have any tool/reasoning parts that need conversion
+    // Check if we have any tool/reasoning parts that need conversion (excluding errors)
     const hasToolOrReasoningParts = parts.some(part =>
       part.type === 'reasoning' ||
-      part.type?.startsWith('tool-') ||
-      part.type === 'tool-result'
+      (part.type?.startsWith('tool-') && part.state !== 'output-error')
     );
 
     if (!hasToolOrReasoningParts) {
@@ -536,20 +525,17 @@ export default function App() {
     const chainOfThoughtSteps = [];
     const textParts = [];
 
-    // Helper to extract tool name from part type
+    // Helper to extract tool name from AI SDK 5.0 part type
     const getToolName = (part) => {
-      if (part.type === 'tool-result') {
-        return part.toolName || 'Tool';
-      }
       if (part.type?.startsWith('tool-')) {
         return part.type.replace('tool-', '');
       }
       return 'Unknown Tool';
     };
 
-    // Helper to extract URL from tool input/output
+    // Helper to extract URL from AI SDK 5.0 tool input/output
     const extractUrl = (part) => {
-      return part.output?.url || part.input?.url || part.result?.url || part.args?.url;
+      return part.output?.url || part.input?.url;
     };
 
     parts.forEach((part, index) => {
@@ -565,88 +551,53 @@ export default function App() {
             </div>
           )
         });
-      } else if (part.type?.startsWith('tool-') || part.type === 'tool-result') {
+      } else if (part.type?.startsWith('tool-') && part.state !== 'output-error') {
         const toolName = getToolName(part);
         const url = extractUrl(part);
 
-        if (part.type === 'tool-result') {
-          // Handle legacy tool-result format (from error handling)
-          if (part.error) {
+        // Handle AI SDK 5.0 tool-{toolName} format (excluding errors)
+        switch (part.state) {
+          case 'input-available':
             chainOfThoughtSteps.push({
-              label: `${toolName} ${CHAIN_OF_THOUGHT_LABELS.ERROR}`,
-              description: part.error,
-              status: CHAIN_OF_THOUGHT_STATUSES.COMPLETE,
+              label: `${CHAIN_OF_THOUGHT_LABELS.USING_TOOL} ${toolName}`,
+              description: url
+                ? `Fetching: ${url}`
+                : `Calling ${toolName} with: ${JSON.stringify(part.input || {}).substring(0, 100)}...`,
+              status: CHAIN_OF_THOUGHT_STATUSES.ACTIVE,
               icon: SearchIcon,
+              searchResults: url ? [url] : undefined,
               toolCallId: part.toolCallId
             });
-          } else {
-            const resultLabel = `${toolName} ${CHAIN_OF_THOUGHT_LABELS.COMPLETE}`;
-            const resultDescription = url ? `Retrieved data from ${url}` : CHAIN_OF_THOUGHT_DESCRIPTIONS.OPERATION_COMPLETED;
+            break;
+
+          case 'output-available':
+            const successLabel = `${toolName} ${CHAIN_OF_THOUGHT_LABELS.SUCCESS}`;
+            let successDescription = CHAIN_OF_THOUGHT_DESCRIPTIONS.SUCCESSFULLY_RETRIEVED;
+
+            if (part.output?.status === 200) {
+              successDescription = url ? `Successfully fetched ${url}` : `Fetched ${part.output.contentLength || 0} bytes`;
+            } else if (part.output) {
+              successDescription = url ? `Retrieved data from ${url}` : CHAIN_OF_THOUGHT_DESCRIPTIONS.OPERATION_COMPLETED;
+            }
 
             chainOfThoughtSteps.push({
-              label: resultLabel,
-              description: resultDescription,
+              label: successLabel,
+              description: successDescription,
               status: CHAIN_OF_THOUGHT_STATUSES.COMPLETE,
               icon: SearchIcon,
               searchResults: url ? [url] : undefined,
               toolCallId: part.toolCallId
             });
-          }
-        } else {
-          // Handle AI SDK 5.0 tool-{toolName} format
-          switch (part.state) {
-            case 'input-available':
-              chainOfThoughtSteps.push({
-                label: `${CHAIN_OF_THOUGHT_LABELS.USING_TOOL} ${toolName}`,
-                description: url
-                  ? `Fetching: ${url}`
-                  : `Calling ${toolName} with: ${JSON.stringify(part.input || {}).substring(0, 100)}...`,
-                status: CHAIN_OF_THOUGHT_STATUSES.ACTIVE,
-                icon: SearchIcon,
-                searchResults: url ? [url] : undefined,
-                toolCallId: part.toolCallId
-              });
-              break;
+            break;
 
-            case 'output-available':
-              const successLabel = `${toolName} ${CHAIN_OF_THOUGHT_LABELS.SUCCESS}`;
-              let successDescription = CHAIN_OF_THOUGHT_DESCRIPTIONS.SUCCESSFULLY_RETRIEVED;
-
-              if (part.output?.status === 200) {
-                successDescription = url ? `Successfully fetched ${url}` : `Fetched ${part.output.contentLength || 0} bytes`;
-              } else if (part.output) {
-                successDescription = url ? `Retrieved data from ${url}` : CHAIN_OF_THOUGHT_DESCRIPTIONS.OPERATION_COMPLETED;
-              }
-
-              chainOfThoughtSteps.push({
-                label: successLabel,
-                description: successDescription,
-                status: CHAIN_OF_THOUGHT_STATUSES.COMPLETE,
-                icon: SearchIcon,
-                searchResults: url ? [url] : undefined,
-                toolCallId: part.toolCallId
-              });
-              break;
-
-            case 'output-error':
-              chainOfThoughtSteps.push({
-                label: `${toolName} ${CHAIN_OF_THOUGHT_LABELS.ERROR}`,
-                description: part.errorText || CHAIN_OF_THOUGHT_DESCRIPTIONS.TOOL_EXECUTION_FAILED,
-                status: CHAIN_OF_THOUGHT_STATUSES.COMPLETE,
-                icon: SearchIcon,
-                toolCallId: part.toolCallId
-              });
-              break;
-
-            default:
-              chainOfThoughtSteps.push({
-                label: `${CHAIN_OF_THOUGHT_LABELS.USING_TOOL} ${toolName}`,
-                description: CHAIN_OF_THOUGHT_DESCRIPTIONS.PROCESSING,
-                status: CHAIN_OF_THOUGHT_STATUSES.PENDING,
-                icon: SearchIcon,
-                toolCallId: part.toolCallId
-              });
-          }
+          default:
+            chainOfThoughtSteps.push({
+              label: `${CHAIN_OF_THOUGHT_LABELS.USING_TOOL} ${toolName}`,
+              description: CHAIN_OF_THOUGHT_DESCRIPTIONS.PROCESSING,
+              status: CHAIN_OF_THOUGHT_STATUSES.PENDING,
+              icon: SearchIcon,
+              toolCallId: part.toolCallId
+            });
         }
       } else if (part.type === 'text') {
         textParts.push(part);
@@ -730,12 +681,26 @@ export default function App() {
             );
           }
 
-          // Text part - use Response component for markdown rendering
-          if (part.type === 'text') {
-            return <Response key={`text-${index}`}>{part.text}</Response>;
-          }
+           // Error part - display as error card
+           if (part.type?.startsWith('tool-') && part.state === 'output-error') {
+             return (
+               <div key={`error-${index}`} className="p-4 bg-destructive/10 border border-destructive/20 rounded-md">
+                 <div className="flex items-center gap-2 text-destructive">
+                   <div className="font-medium text-sm">Error</div>
+                 </div>
+                 <div className="text-sm text-destructive/80 mt-1">
+                   {part.errorText || part.error || 'An error occurred'}
+                 </div>
+               </div>
+             );
+           }
 
-          // Unknown part type - render as raw JSON for debugging
+           // Text part - use Response component for markdown rendering
+           if (part.type === 'text') {
+             return <Response key={`text-${index}`}>{part.text}</Response>;
+           }
+
+           // Unknown part type - render as raw JSON for debugging
           return (
             <div key={`unknown-${index}`} className="p-4 bg-muted/50 rounded-md">
               <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">
