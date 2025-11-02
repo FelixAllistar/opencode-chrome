@@ -497,24 +497,20 @@ export default function App() {
     setCurrentChatIdState(null);
   };
 
-  // Render mixed content message parts (text + tool calls/results)
-  // Convert legacy parts to chain-of-thought format
-  const convertLegacyPartsToChainOfThought = (parts) => {
+  // Convert AI SDK 5.0 parts to chain-of-thought format
+  const convertPartsToChainOfThought = (parts) => {
     // Check if we have any tool/reasoning parts that need conversion
-    const hasLegacyParts = parts.some(part =>
+    const hasToolOrReasoningParts = parts.some(part =>
       part.type === 'reasoning' ||
-      part.type === 'tool-call' ||
-      part.type === 'tool-result' ||
       part.type?.startsWith('tool-')
     );
 
-    if (!hasLegacyParts) {
-      return parts; // Return as-is if no legacy parts
+    if (!hasToolOrReasoningParts) {
+      return parts; // Return as-is if no tool/reasoning parts
     }
 
     const chainOfThoughtSteps = [];
     const textParts = [];
-    let lastToolCall = null;
 
     parts.forEach((part, index) => {
       if (part.type === 'reasoning') {
@@ -529,111 +525,113 @@ export default function App() {
             </div>
           )
         });
-      } else if (part.type === 'tool-call') {
-        const toolName = part.toolName || 'Unknown tool';
-        const description = part.args?.url
-          ? `Fetching: ${part.args.url}`
-          : `Calling ${toolName} with: ${JSON.stringify(part.args || {}).substring(0, 100)}...`;
+      } else if (part.type?.startsWith('tool-')) {
+        // AI SDK 5.0 tool part format: tool-{toolName}
+        const toolName = part.type.replace('tool-', '');
 
-        chainOfThoughtSteps.push({
-          label: `Using ${toolName}`,
-          description,
-          status: 'complete',
-          icon: SearchIcon,
-          searchResults: part.args?.url ? [part.args.url] : undefined
-        });
+        switch (part.state) {
+          case 'input-available':
+            // Tool call initiated
+            chainOfThoughtSteps.push({
+              label: `Using ${toolName}`,
+              description: part.input?.url
+                ? `Fetching: ${part.input.url}`
+                : `Calling ${toolName} with: ${JSON.stringify(part.input || {}).substring(0, 100)}...`,
+              status: 'active',
+              icon: SearchIcon,
+              searchResults: part.input?.url ? [part.input.url] : undefined,
+              toolCallId: part.toolCallId
+            });
+            break;
 
-        lastToolCall = part; // Remember the tool call for potential result pairing
-      } else if (part.type === 'tool-result' || part.type?.startsWith('tool-')) {
-        // Try multiple sources for the tool name
-        const toolName = part.toolName ||
-                          part.args?.toolName ||
-                          lastToolCall?.toolName ||
-                          (part.type?.startsWith('tool-') ? part.type.replace('tool-', '') : null) ||
-                          'Tool';
+          case 'output-available':
+            // Tool execution successful
+            const successResults = [];
+            let successUrl = null;
 
-        if (part.error) {
-          chainOfThoughtSteps.push({
-            label: `${toolName} Error`,
-            description: part.error,
-            status: 'complete',
-            icon: SearchIcon
-          });
-        } else {
-          // Extract URL from various possible locations
-          const searchResults = [];
-          let url = null;
-
-          if (part.result?.url) {
-            url = part.result.url;
-            searchResults.push(url);
-          } else if (part.args?.url) {
-            url = part.args.url;
-            searchResults.push(url);
-          } else if (lastToolCall?.args?.url) {
-            url = lastToolCall.args.url;
-            searchResults.push(url);
-          }
-
-          // Create a more descriptive result label and description
-          let resultLabel = `${toolName} Result`;
-          let resultDescription = 'Successfully retrieved data';
-
-          if (part.result?.status === 200) {
-            resultLabel = `${toolName} Success`;
-            if (url) {
-              resultDescription = `Successfully fetched ${url}`;
-            } else {
-              resultDescription = `Fetched ${part.result.contentLength || 0} bytes`;
+            if (part.output?.url) {
+              successUrl = part.output.url;
+              successResults.push(successUrl);
+            } else if (part.input?.url) {
+              successUrl = part.input.url;
+              successResults.push(successUrl);
             }
-          } else if (part.result?.error) {
-            resultLabel = `${toolName} Error`;
-            resultDescription = part.result.error;
-          } else if (part.output || part.result) {
-            resultLabel = `${toolName} Complete`;
-            if (url) {
-              resultDescription = `Retrieved data from ${url}`;
-            } else {
-              resultDescription = 'Operation completed successfully';
+
+            let successLabel = `${toolName} Success`;
+            let successDescription = 'Successfully retrieved data';
+
+            if (part.output?.status === 200) {
+              if (successUrl) {
+                successDescription = `Successfully fetched ${successUrl}`;
+              } else {
+                successDescription = `Fetched ${part.output.contentLength || 0} bytes`;
+              }
+            } else if (part.output) {
+              if (successUrl) {
+                successDescription = `Retrieved data from ${successUrl}`;
+              } else {
+                successDescription = 'Operation completed successfully';
+              }
             }
-          }
 
-          const stepData = {
-            label: resultLabel,
-            description: resultDescription,
-            status: 'complete',
-            icon: SearchIcon,
-            searchResults: searchResults.length > 0 ? searchResults : undefined
-          };
+            const successStep = {
+              label: successLabel,
+              description: successDescription,
+              status: 'complete',
+              icon: SearchIcon,
+              searchResults: successResults.length > 0 ? successResults : undefined,
+              toolCallId: part.toolCallId
+            };
 
-          // Add result content as custom content for debugging
-          if (part.result || part.output) {
-            stepData.content = (
-              <div className="text-xs text-muted-foreground mt-2">
-                <details>
-                  <summary className="cursor-pointer">Debug info</summary>
-                  <div className="mt-1 space-y-2">
-                    <div><strong>Tool:</strong> {toolName}</div>
-                    {url && <div><strong>URL:</strong> {url}</div>}
-                    {part.result?.status && <div><strong>Status:</strong> {part.result.status}</div>}
-                    <details>
-                      <summary className="cursor-pointer text-xs">Raw result data</summary>
-                      <pre className="mt-1 p-2 bg-muted rounded text-xs overflow-x-auto">
-                        {typeof (part.result || part.output) === 'string'
-                          ? (part.result || part.output).substring(0, 500) + ((part.result || part.output).length > 500 ? '...' : '')
-                          : JSON.stringify(part.result || part.output, null, 2).substring(0, 500) + '...'
-                        }
-                      </pre>
-                    </details>
-                  </div>
-                </details>
-              </div>
-            );
-          }
+            // Add result content as custom content for debugging
+            if (part.output) {
+              successStep.content = (
+                <div className="text-xs text-muted-foreground mt-2">
+                  <details>
+                    <summary className="cursor-pointer">Debug info</summary>
+                    <div className="mt-1 space-y-2">
+                      <div><strong>Tool:</strong> {toolName}</div>
+                      {successUrl && <div><strong>URL:</strong> {successUrl}</div>}
+                      {part.output?.status && <div><strong>Status:</strong> {part.output.status}</div>}
+                      <details>
+                        <summary className="cursor-pointer text-xs">Raw result data</summary>
+                        <pre className="mt-1 p-2 bg-muted rounded text-xs overflow-x-auto">
+                          {typeof part.output === 'string'
+                            ? part.output.substring(0, 500) + (part.output.length > 500 ? '...' : '')
+                            : JSON.stringify(part.output, null, 2).substring(0, 500) + '...'
+                          }
+                        </pre>
+                      </details>
+                    </div>
+                  </details>
+                </div>
+              );
+            }
 
-          chainOfThoughtSteps.push(stepData);
+            chainOfThoughtSteps.push(successStep);
+            break;
+
+          case 'output-error':
+            // Tool execution failed
+            chainOfThoughtSteps.push({
+              label: `${toolName} Error`,
+              description: part.errorText || 'Tool execution failed',
+              status: 'complete',
+              icon: SearchIcon,
+              toolCallId: part.toolCallId
+            });
+            break;
+
+          default:
+            // Unknown state - show as pending
+            chainOfThoughtSteps.push({
+              label: `Using ${toolName}`,
+              description: 'Processing...',
+              status: 'pending',
+              icon: SearchIcon,
+              toolCallId: part.toolCallId
+            });
         }
-        lastToolCall = null; // Reset tool call reference
       } else if (part.type === 'text') {
         textParts.push(part);
       }
@@ -663,8 +661,8 @@ export default function App() {
       );
     }
 
-    // Convert legacy parts to chain-of-thought format
-    const convertedParts = convertLegacyPartsToChainOfThought(message.parts);
+    // Convert AI SDK 5.0 parts to chain-of-thought format
+    const convertedParts = convertPartsToChainOfThought(message.parts);
 
     return (
       <div className="space-y-4">
