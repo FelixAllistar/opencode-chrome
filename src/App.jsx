@@ -74,6 +74,29 @@ import {
   PromptInputTools,
 } from './components/ai-elements/prompt-input.tsx';
 
+// Constants for ChainOfThought processing
+const CHAIN_OF_THOUGHT_LABELS = {
+  THINKING: 'Thinking',
+  USING_TOOL: 'Using',
+  SUCCESS: 'Success',
+  ERROR: 'Error',
+  COMPLETE: 'Complete'
+};
+
+const CHAIN_OF_THOUGHT_DESCRIPTIONS = {
+  ANALYZING_REQUEST: 'Analyzing the request',
+  PROCESSING: 'Processing...',
+  TOOL_EXECUTION_FAILED: 'Tool execution failed',
+  SUCCESSFULLY_RETRIEVED: 'Successfully retrieved data',
+  OPERATION_COMPLETED: 'Operation completed successfully'
+};
+
+const CHAIN_OF_THOUGHT_STATUSES = {
+  COMPLETE: 'complete',
+  ACTIVE: 'active',
+  PENDING: 'pending'
+};
+
 
 
 
@@ -502,7 +525,8 @@ export default function App() {
     // Check if we have any tool/reasoning parts that need conversion
     const hasToolOrReasoningParts = parts.some(part =>
       part.type === 'reasoning' ||
-      part.type?.startsWith('tool-')
+      part.type?.startsWith('tool-') ||
+      part.type === 'tool-result'
     );
 
     if (!hasToolOrReasoningParts) {
@@ -512,12 +536,28 @@ export default function App() {
     const chainOfThoughtSteps = [];
     const textParts = [];
 
+    // Helper to extract tool name from part type
+    const getToolName = (part) => {
+      if (part.type === 'tool-result') {
+        return part.toolName || 'Tool';
+      }
+      if (part.type?.startsWith('tool-')) {
+        return part.type.replace('tool-', '');
+      }
+      return 'Unknown Tool';
+    };
+
+    // Helper to extract URL from tool input/output
+    const extractUrl = (part) => {
+      return part.output?.url || part.input?.url || part.result?.url || part.args?.url;
+    };
+
     parts.forEach((part, index) => {
       if (part.type === 'reasoning') {
         chainOfThoughtSteps.push({
-          label: 'Thinking',
-          description: 'Analyzing the request',
-          status: index < parts.length - 1 ? 'complete' : 'active',
+          label: CHAIN_OF_THOUGHT_LABELS.THINKING,
+          description: CHAIN_OF_THOUGHT_DESCRIPTIONS.ANALYZING_REQUEST,
+          status: index < parts.length - 1 ? CHAIN_OF_THOUGHT_STATUSES.COMPLETE : CHAIN_OF_THOUGHT_STATUSES.ACTIVE,
           icon: BrainIcon,
           content: (
             <div className="text-sm text-muted-foreground w-full overflow-x-auto whitespace-pre-wrap break-words">
@@ -525,112 +565,88 @@ export default function App() {
             </div>
           )
         });
-      } else if (part.type?.startsWith('tool-')) {
-        // AI SDK 5.0 tool part format: tool-{toolName}
-        const toolName = part.type.replace('tool-', '');
+      } else if (part.type?.startsWith('tool-') || part.type === 'tool-result') {
+        const toolName = getToolName(part);
+        const url = extractUrl(part);
 
-        switch (part.state) {
-          case 'input-available':
-            // Tool call initiated
+        if (part.type === 'tool-result') {
+          // Handle legacy tool-result format (from error handling)
+          if (part.error) {
             chainOfThoughtSteps.push({
-              label: `Using ${toolName}`,
-              description: part.input?.url
-                ? `Fetching: ${part.input.url}`
-                : `Calling ${toolName} with: ${JSON.stringify(part.input || {}).substring(0, 100)}...`,
-              status: 'active',
+              label: `${toolName} ${CHAIN_OF_THOUGHT_LABELS.ERROR}`,
+              description: part.error,
+              status: CHAIN_OF_THOUGHT_STATUSES.COMPLETE,
               icon: SearchIcon,
-              searchResults: part.input?.url ? [part.input.url] : undefined,
               toolCallId: part.toolCallId
             });
-            break;
+          } else {
+            const resultLabel = `${toolName} ${CHAIN_OF_THOUGHT_LABELS.COMPLETE}`;
+            const resultDescription = url ? `Retrieved data from ${url}` : CHAIN_OF_THOUGHT_DESCRIPTIONS.OPERATION_COMPLETED;
 
-          case 'output-available':
-            // Tool execution successful
-            const successResults = [];
-            let successUrl = null;
+            chainOfThoughtSteps.push({
+              label: resultLabel,
+              description: resultDescription,
+              status: CHAIN_OF_THOUGHT_STATUSES.COMPLETE,
+              icon: SearchIcon,
+              searchResults: url ? [url] : undefined,
+              toolCallId: part.toolCallId
+            });
+          }
+        } else {
+          // Handle AI SDK 5.0 tool-{toolName} format
+          switch (part.state) {
+            case 'input-available':
+              chainOfThoughtSteps.push({
+                label: `${CHAIN_OF_THOUGHT_LABELS.USING_TOOL} ${toolName}`,
+                description: url
+                  ? `Fetching: ${url}`
+                  : `Calling ${toolName} with: ${JSON.stringify(part.input || {}).substring(0, 100)}...`,
+                status: CHAIN_OF_THOUGHT_STATUSES.ACTIVE,
+                icon: SearchIcon,
+                searchResults: url ? [url] : undefined,
+                toolCallId: part.toolCallId
+              });
+              break;
 
-            if (part.output?.url) {
-              successUrl = part.output.url;
-              successResults.push(successUrl);
-            } else if (part.input?.url) {
-              successUrl = part.input.url;
-              successResults.push(successUrl);
-            }
+            case 'output-available':
+              const successLabel = `${toolName} ${CHAIN_OF_THOUGHT_LABELS.SUCCESS}`;
+              let successDescription = CHAIN_OF_THOUGHT_DESCRIPTIONS.SUCCESSFULLY_RETRIEVED;
 
-            let successLabel = `${toolName} Success`;
-            let successDescription = 'Successfully retrieved data';
-
-            if (part.output?.status === 200) {
-              if (successUrl) {
-                successDescription = `Successfully fetched ${successUrl}`;
-              } else {
-                successDescription = `Fetched ${part.output.contentLength || 0} bytes`;
+              if (part.output?.status === 200) {
+                successDescription = url ? `Successfully fetched ${url}` : `Fetched ${part.output.contentLength || 0} bytes`;
+              } else if (part.output) {
+                successDescription = url ? `Retrieved data from ${url}` : CHAIN_OF_THOUGHT_DESCRIPTIONS.OPERATION_COMPLETED;
               }
-            } else if (part.output) {
-              if (successUrl) {
-                successDescription = `Retrieved data from ${successUrl}`;
-              } else {
-                successDescription = 'Operation completed successfully';
-              }
-            }
 
-            const successStep = {
-              label: successLabel,
-              description: successDescription,
-              status: 'complete',
-              icon: SearchIcon,
-              searchResults: successResults.length > 0 ? successResults : undefined,
-              toolCallId: part.toolCallId
-            };
+              chainOfThoughtSteps.push({
+                label: successLabel,
+                description: successDescription,
+                status: CHAIN_OF_THOUGHT_STATUSES.COMPLETE,
+                icon: SearchIcon,
+                searchResults: url ? [url] : undefined,
+                toolCallId: part.toolCallId
+              });
+              break;
 
-            // Add result content as custom content for debugging
-            if (part.output) {
-              successStep.content = (
-                <div className="text-xs text-muted-foreground mt-2">
-                  <details>
-                    <summary className="cursor-pointer">Debug info</summary>
-                    <div className="mt-1 space-y-2">
-                      <div><strong>Tool:</strong> {toolName}</div>
-                      {successUrl && <div><strong>URL:</strong> {successUrl}</div>}
-                      {part.output?.status && <div><strong>Status:</strong> {part.output.status}</div>}
-                      <details>
-                        <summary className="cursor-pointer text-xs">Raw result data</summary>
-                        <pre className="mt-1 p-2 bg-muted rounded text-xs overflow-x-auto">
-                          {typeof part.output === 'string'
-                            ? part.output.substring(0, 500) + (part.output.length > 500 ? '...' : '')
-                            : JSON.stringify(part.output, null, 2).substring(0, 500) + '...'
-                          }
-                        </pre>
-                      </details>
-                    </div>
-                  </details>
-                </div>
-              );
-            }
+            case 'output-error':
+              chainOfThoughtSteps.push({
+                label: `${toolName} ${CHAIN_OF_THOUGHT_LABELS.ERROR}`,
+                description: part.errorText || CHAIN_OF_THOUGHT_DESCRIPTIONS.TOOL_EXECUTION_FAILED,
+                status: CHAIN_OF_THOUGHT_STATUSES.COMPLETE,
+                icon: SearchIcon,
+                toolCallId: part.toolCallId
+              });
+              break;
 
-            chainOfThoughtSteps.push(successStep);
-            break;
-
-          case 'output-error':
-            // Tool execution failed
-            chainOfThoughtSteps.push({
-              label: `${toolName} Error`,
-              description: part.errorText || 'Tool execution failed',
-              status: 'complete',
-              icon: SearchIcon,
-              toolCallId: part.toolCallId
-            });
-            break;
-
-          default:
-            // Unknown state - show as pending
-            chainOfThoughtSteps.push({
-              label: `Using ${toolName}`,
-              description: 'Processing...',
-              status: 'pending',
-              icon: SearchIcon,
-              toolCallId: part.toolCallId
-            });
+            default:
+              chainOfThoughtSteps.push({
+                label: `${CHAIN_OF_THOUGHT_LABELS.USING_TOOL} ${toolName}`,
+                description: CHAIN_OF_THOUGHT_DESCRIPTIONS.PROCESSING,
+                status: CHAIN_OF_THOUGHT_STATUSES.PENDING,
+                icon: SearchIcon,
+                toolCallId: part.toolCallId
+              });
+          }
         }
       } else if (part.type === 'text') {
         textParts.push(part);
@@ -667,15 +683,6 @@ export default function App() {
     return (
       <div className="space-y-4">
         {convertedParts.map((part, index) => {
-          // User message
-          if (part.type === 'user') {
-            return (
-              <div key={`user-${index}`} className="font-medium">
-                {part.text}
-              </div>
-            );
-          }
-
           // Chain of thought part
           if (part.type === 'chain-of-thought' && part.steps) {
             return (
