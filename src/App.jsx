@@ -695,12 +695,45 @@ export default function App() {
              );
            }
 
-           // Text part - use Response component for markdown rendering
-           if (part.type === 'text') {
-             return <Response key={`text-${index}`}>{part.text}</Response>;
-           }
+            // Text part - use Response component for markdown rendering
+            if (part.type === 'text') {
+              return <Response key={`text-${index}`}>{part.text}</Response>;
+            }
 
-           // Unknown part type - render as raw JSON for debugging
+            // Image part - display image from URL
+            if (part.type === 'file' && part.mediaType?.startsWith('image/')) {
+              return (
+                <div key={`image-${index}`} className="my-4">
+                  <img
+                    src={part.url}
+                    alt={part.filename || 'Image'}
+                    className="max-w-full h-auto rounded-lg border shadow-sm"
+                    loading="lazy"
+                  />
+                </div>
+              );
+            }
+
+            // Binary image part - convert to data URL
+            if (part.type === 'image') {
+              const dataUrl = part.image instanceof Uint8Array
+                ? `data:image/png;base64,${btoa(String.fromCharCode(...part.image))}`
+                : typeof part.image === 'string' && part.image.startsWith('data:')
+                  ? part.image
+                  : `data:image/png;base64,${part.image}`;
+              return (
+                <div key={`image-${index}`} className="my-4">
+                  <img
+                    src={dataUrl}
+                    alt="Generated image"
+                    className="max-w-full h-auto rounded-lg border shadow-sm"
+                    loading="lazy"
+                  />
+                </div>
+              );
+            }
+
+            // Unknown part type - render as raw JSON for debugging
           return (
             <div key={`unknown-${index}`} className="p-4 bg-muted/50 rounded-md">
               <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">
