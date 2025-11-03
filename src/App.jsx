@@ -72,6 +72,12 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
+  PromptInputAttachments,
+  PromptInputAttachment,
+  PromptInputActionMenu,
+  PromptInputActionMenuTrigger,
+  PromptInputActionMenuContent,
+  PromptInputActionAddAttachments,
 } from './components/ai-elements/prompt-input.tsx';
 
 // Constants for ChainOfThought processing
@@ -327,10 +333,34 @@ export default function App() {
 
     if (!apiKey || !(hasText || hasAttachments) || chatsDataRef.current[chatId]?.status !== 'ready') return;
 
+    // Build user message parts
+    const userMessageParts = [];
+
+    // Add text part if present
+    if (message.text) {
+      userMessageParts.push({ type: 'text', text: message.text });
+    }
+
+    // Add file parts for attachments
+    if (message.files && message.files.length > 0) {
+      message.files.forEach(file => {
+        userMessageParts.push({
+          type: 'file',
+          mediaType: file.mediaType,
+          url: file.url
+        });
+      });
+    }
+
+    // Fallback text if no content
+    if (userMessageParts.length === 0) {
+      userMessageParts.push({ type: 'text', text: 'Sent with attachments' });
+    }
+
     const userMessage = {
       id: Date.now().toString(),
       role: 'user',
-      parts: [{ type: 'text', text: message.text || 'Sent with attachments' }]
+      parts: userMessageParts
     };
 
     const aiMessageId = (Date.now() + 1).toString();
@@ -911,34 +941,45 @@ export default function App() {
                  </Conversation>
                </div>
 
-               {/* Prompt input - fixed at bottom */}
-               <div className="border-t bg-background p-4">
-                  <PromptInput onSubmit={handleSend}>
-                    <PromptInputBody>
-                      <PromptInputTextarea inputRef={inputRef} />
-                    </PromptInputBody>
-                   <PromptInputFooter>
-                     <PromptInputTools>
-                       <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
-                         <PromptInputModelSelectTrigger>
-                           <PromptInputModelSelectValue />
-                         </PromptInputModelSelectTrigger>
-                         <PromptInputModelSelectContent>
-                           {MODELS.map((model) => (
-                             <PromptInputModelSelectItem
-                               key={model.id}
-                               value={model.id}
-                             >
-                               {model.name}
-                             </PromptInputModelSelectItem>
-                           ))}
-                         </PromptInputModelSelectContent>
-                       </PromptInputModelSelect>
-                     </PromptInputTools>
-                     <PromptInputSubmit status={currentChatStatus} />
-                   </PromptInputFooter>
-                 </PromptInput>
-               </div>
+                {/* Prompt input - fixed at bottom */}
+                <div className="border-t bg-background p-4">
+                   <PromptInput onSubmit={handleSend} accept="image/*" multiple globalDrop>
+                     <PromptInputBody>
+                       <PromptInputAttachments>
+                         {(attachment) => (
+                           <PromptInputAttachment data={attachment} />
+                         )}
+                       </PromptInputAttachments>
+                       <PromptInputTextarea inputRef={inputRef} />
+                     </PromptInputBody>
+                    <PromptInputFooter>
+                      <PromptInputTools>
+                        <PromptInputActionMenu>
+                          <PromptInputActionMenuTrigger />
+                          <PromptInputActionMenuContent>
+                            <PromptInputActionAddAttachments />
+                          </PromptInputActionMenuContent>
+                        </PromptInputActionMenu>
+                        <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
+                          <PromptInputModelSelectTrigger>
+                            <PromptInputModelSelectValue />
+                          </PromptInputModelSelectTrigger>
+                          <PromptInputModelSelectContent>
+                            {MODELS.map((model) => (
+                              <PromptInputModelSelectItem
+                                key={model.id}
+                                value={model.id}
+                              >
+                                {model.name}
+                              </PromptInputModelSelectItem>
+                            ))}
+                          </PromptInputModelSelectContent>
+                        </PromptInputModelSelect>
+                      </PromptInputTools>
+                      <PromptInputSubmit status={currentChatStatus} />
+                    </PromptInputFooter>
+                  </PromptInput>
+                </div>
             </div>
            </SidebarInset>
       </SidebarProvider>

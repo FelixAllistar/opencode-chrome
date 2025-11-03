@@ -32,6 +32,7 @@ NEVER run pnpm build or pnpm run dev. the user will be responsible for building.
 - **Vercel AI SDK 5**: Latest AI SDK for streaming responses, tool calling, and multi-step conversations with `readUIMessageStream` for incremental UI updates
 - **Vercel AI Elements**: Professional UI components for AI chat interfaces (Branch, Message, PromptInput, Conversation, Response, Tool, Reasoning) with built-in streaming support
 - **Streamdown**: Unified Markdown and LaTeX rendering for rich text content
+- **Image Support**: Handles both URL-based images (file parts) and binary images (image parts) in chat messages with responsive display
 - **Chrome Storage API**: Persistent storage for chats and settings with separate keys for metadata and messages
 - **Tailwind CSS**: Utility-first CSS framework with custom theme variables
 - **Vite**: Fast build tool and development server for the browser extension
@@ -57,6 +58,8 @@ Chats are stored as objects keyed by chat ID in `chatsData` state, each containi
 Messages use a `parts` array for rich content. Each part has a `type` and content:
 
 - **`text`**: Markdown/LaTeX content rendered via `Response` component
+- **`file`**: File references with URL and mediaType, displayed as images when mediaType starts with 'image/'
+- **`image`**: Binary image data converted to data URLs for display
 - **`tool-call`**: Tool invocation with `toolName`, `args`, and `toolCallId` for correlation
 - **`tool-result`**: Tool execution result with `result`, `error`, and matching `toolCallId`
 - **`reasoning`**: AI's internal thinking, displayed in collapsible `Reasoning` component
@@ -65,22 +68,27 @@ Parts stream incrementally during generation, enabling real-time UI updates.
 
 Messages are loaded on-demand when switching chats. Streaming responses update the specific chat's messages in real-time with incremental part updates. Persistence uses Chrome local storage with separate keys for metadata and messages.
 
+**Note**: Images can now be attached by users and are sent to AI models. Image display supports both URL-based images (file parts) and binary images (image parts) in chat messages. User attachments are included in message history and sent to models that support them.
+
 ### Data Flow
-1. **User Input** → `PromptInput` → `handleSend` in `App.jsx`
+1. **User Input** → `PromptInput` → `handleSend` in `App.jsx` (includes text and file attachments)
 2. **Message Filtering** → `filterMessagesForAPI()` excludes error messages from conversation history sent to API
 3. **AI Processing** → Direct API calls to OpenCode Zen endpoints via Vercel AI SDK 5 with tool calling enabled
-4. **Real-time Streaming** → `consumeUIMessageStream()` yields incremental `UIMessage` objects with updated parts (text, tool-call, tool-result, reasoning)
+4. **Real-time Streaming** → `consumeUIMessageStream()` yields incremental `UIMessage` objects with updated parts (text, tool-call, tool-result, reasoning, file, image)
 5. **UI Updates** → `renderMessageParts()` function handles complex message structures with specialized rendering for each part type
 6. **Error Handling** → `createErrorForUI()` formats errors for display, `createUnhandledRejectionHandler()` manages uncaught errors
 7. **Tool Execution** → AI invokes tools during generation; results are streamed back and correlated via `toolCallId`
 8. **Reasoning Display** → Internal AI reasoning steps are captured in reasoning parts and displayed via collapsible `Reasoning` components
-9. **Persistence** → Auto-saves to Chrome storage on message changes (metadata + messages with all part types)
-10. **Chat Management** → CRUD operations via `chatStorage.js` utilities with on-demand message loading
-11. **Rich Rendering** → Streamdown processes Markdown and LaTeX in AI responses via AI Elements components, with specialized rendering for tool calls/results and reasoning
+9. **Image Display** → File parts with image mediaType and image parts with binary data are rendered as images in the chat
+10. **Attachment Processing** → User-uploaded images are converted to file parts and included in messages sent to AI models
+11. **Persistence** → Auto-saves to Chrome storage on message changes (metadata + messages with all part types)
+12. **Chat Management** → CRUD operations via `chatStorage.js` utilities with on-demand message loading
+13. **Rich Rendering** → Streamdown processes Markdown and LaTeX in AI responses via AI Elements components, with specialized rendering for tool calls/results, reasoning, and images
 
 ### Advanced Message Rendering
 The `renderMessageParts` function in `App.jsx` handles complex message structures with multiple content types:
 - **Text Content**: Standard markdown and LaTeX rendering via `Response` component
+- **Image Content**: File parts with image mediaType display as `<img>` elements with responsive sizing and lazy loading; binary image parts are converted to data URLs for display
 - **Tool Calls**: Interactive display showing function name, arguments, and execution state
 - **Tool Results**: Combined input/output display with error handling for failed tool executions
 - **Reasoning Steps**: Collapsible sections showing AI's internal thought process
