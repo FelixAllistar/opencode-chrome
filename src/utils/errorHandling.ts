@@ -105,7 +105,9 @@ export const createUnhandledRejectionHandler = (
 
         // Skip if the last AI message already has an error
         const hasError = lastAiMessage?.parts?.some((part: any) => part.type?.startsWith('tool-') && part.state === 'output-error');
-        if (lastAiMessage && !hasError) {
+        // Skip if the last AI message has text content (don't show "No output generated" if there was output)
+        const hasTextContent = lastAiMessage?.parts?.some((part: any) => part.type === 'text' && part.text?.trim());
+        if (lastAiMessage && !hasError && !hasTextContent) {
           flushSync(() => setChatsData((prev: any) => ({
             ...prev,
             [recentChatId]: {

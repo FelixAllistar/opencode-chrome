@@ -27,6 +27,7 @@ export const generateResponse = async (modelId, type, messages, apiKey, options 
       ...(options.system && { system: options.system }),
       ...(options.temperature && { temperature: options.temperature }),
       ...(options.maxTokens && { maxTokens: options.maxTokens }),
+      ...(options.abortSignal && { abortSignal: options.abortSignal }),
       // Handle each step completion including tool calls
       onStepFinish: (result) => {
         // Transform step data into chain-of-thought format

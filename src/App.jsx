@@ -116,6 +116,7 @@ export default function App() {
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
+  const [abortControllers, setAbortControllers] = useState({});
 
   // Load theme immediately for loading screen
   const [theme, setTheme] = useStorage('theme', 'zenburn');
@@ -385,6 +386,10 @@ export default function App() {
       }
     }));
 
+    // Create abort controller for this chat
+    const abortController = new AbortController();
+    setAbortControllers(prev => ({ ...prev, [chatId]: abortController }));
+
     try {
       setChatsData(prev => ({
         ...prev,
@@ -399,6 +404,7 @@ export default function App() {
         const result = await generateResponse(selectedModel.id, selectedModel.type, messagesToSend, apiKey, {
           enableTools: true,
           system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
+          abortSignal: abortController.signal,
         });
 
         console.log('✅ generateResponse completed successfully');
@@ -443,8 +449,35 @@ export default function App() {
           }
         }));
 
+        // Clean up abort controller on successful completion
+        setAbortControllers(prev => {
+          const newControllers = { ...prev };
+          delete newControllers[chatId];
+          return newControllers;
+        });
+
       } catch (streamError) {
         console.error('❌ Error during streaming or completion:', streamError);
+
+        // Check if this was due to user-initiated abortion
+        const controller = abortControllers[chatId];
+        const wasAborted = controller?.signal.aborted;
+
+        if (wasAborted) {
+          console.log('🛑 Stream was aborted by user, not displaying as error');
+          // For aborted streams, just ensure status is ready and don't modify the message
+          flushSync(() => setChatsData(prev => ({
+            ...prev,
+            [chatId]: {
+              ...prev[chatId],
+              status: 'ready',
+              messages: prev[chatId].messages.map(msg =>
+                msg.id === aiMessageId ? { ...msg, status: 'ready' } : msg
+              )
+            }
+          })));
+          return;
+        }
 
         // Format the error directly for UI display
         const errorForUI = createErrorForUI(streamError);
@@ -506,6 +539,13 @@ export default function App() {
         }
       })));
     } finally {
+      // Clean up abort controller
+      setAbortControllers(prev => {
+        const newControllers = { ...prev };
+        delete newControllers[chatId];
+        return newControllers;
+      });
+
       // Save messages regardless of outcome, using the ref to get latest state
       const finalMessages = chatsDataRef.current[chatId]?.messages || [];
       const updatedChatsList = await saveChatMessages(chatId, finalMessages);
@@ -788,6 +828,12 @@ export default function App() {
     const chatToStop = currentChatId;
     if (!chatToStop || chatsDataRef.current[chatToStop]?.status !== 'streaming') return;
 
+    // Abort the controller if it exists
+    const controller = abortControllers[chatToStop];
+    if (controller) {
+      controller.abort();
+    }
+
     setChatsData(prev => ({
       ...prev,
       [chatToStop]: {
@@ -798,7 +844,7 @@ export default function App() {
         )
       }
     }));
-    
+
     // Save the partially generated messages
     const finalMessages = chatsDataRef.current[chatToStop]?.messages || [];
     const updatedChatsList = await saveChatMessages(chatToStop, finalMessages);
@@ -976,7 +1022,7 @@ export default function App() {
                           </PromptInputModelSelectContent>
                         </PromptInputModelSelect>
                       </PromptInputTools>
-                      <PromptInputSubmit status={currentChatStatus} />
+                       <PromptInputSubmit status={currentChatStatus} onStop={stopGeneration} />
                     </PromptInputFooter>
                   </PromptInput>
                 </div>
