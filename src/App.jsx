@@ -345,7 +345,13 @@ export default function App() {
     const hasText = Boolean(message.text);
     const hasAttachments = Boolean(message.files?.length);
 
-    if (!apiKey || !(hasText || hasAttachments) || chat.status !== 'ready') return;
+    if (!apiKey || !(hasText || hasAttachments) || chat.status !== 'ready') {
+      // Clear the error if user tries to send a new message
+      if (chat.error) {
+        chat.clearError();
+      }
+      return;
+    }
 
     try {
       // Use our chat hook to send the message
@@ -747,6 +753,36 @@ export default function App() {
                    <ConversationScrollButton />
                  </Conversation>
                </div>
+
+               {/* Error display */}
+               {chat.error && (
+                 <div className="border-t bg-destructive/10 p-4">
+                   <div className="flex items-center justify-between gap-4">
+                     <div className="flex items-center gap-2">
+                       <div className="size-4 rounded-full bg-destructive"></div>
+                       <span className="text-sm text-destructive font-medium">
+                         Error: {chat.error?.error || chat.error?.message || 'Something went wrong'}
+                       </span>
+                     </div>
+                     <div className="flex items-center gap-2">
+                       <button
+                         type="button"
+                         onClick={() => chat.reload()}
+                         className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3"
+                       >
+                         Retry
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => chat.clearError()}
+                         className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-8 px-3"
+                       >
+                         Dismiss
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+               )}
 
                 {/* Prompt input - fixed at bottom */}
                 <div className="border-t bg-background p-4">
