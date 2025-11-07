@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { flushSync } from 'react-dom';
 import { Plus, Settings, BrainIcon, SearchIcon } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
@@ -7,7 +6,7 @@ import { MODELS } from './utils/constants.js';
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
 import { ThemeSwitcher } from './components/settings/ThemeSwitcher.jsx';
 
-import { generateResponse } from './services/ai/client.js';
+import { useOpenCodeChat } from './hooks/useOpenCodeChat.js';
 import {
   getChatsList,
   createChat,
@@ -17,7 +16,7 @@ import {
   getCurrentChatId,
   setCurrentChatId
 } from './utils/chatStorage.js';
-import { createErrorForUI, createUnhandledRejectionHandler, filterMessagesForAPI } from './utils/errorHandling.js';
+import { createUnhandledRejectionHandler } from './utils/errorHandling.js';
 import { AppSidebar } from './components/app-sidebar.jsx';
 import {
   SidebarProvider,
@@ -116,7 +115,6 @@ export default function App() {
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
-  const [abortControllers, setAbortControllers] = useState({});
 
   // Load theme immediately for loading screen
   const [theme, setTheme] = useStorage('theme', 'zenburn');
@@ -171,10 +169,25 @@ export default function App() {
   const chatsDataRef = useRef();
   chatsDataRef.current = chatsData;
 
+  // Use our custom useOpenCodeChat hook
+  const chat = useOpenCodeChat({
+    currentChatId,
+    chatsData,
+    setChatsData,
+    apiKey,
+    selectedModel,
+    onError: (errorForUI) => {
+      console.error('Chat error in useOpenCodeChat:', errorForUI);
+      // You can add additional error handling here if needed
+    }
+  });
+
+  // The useOpenCodeChat hook handles updating chatsData internally
+
   // Derived state from chatsData
   const chats = Object.values(chatsData).map(c => c.metadata).sort((a, b) => b.updatedAt - a.updatedAt);
-  const currentChatMessages = chatsData[currentChatId]?.messages || [];
-  const currentChatStatus = chatsData[currentChatId]?.status || 'ready';
+  const currentChatMessages = chat.messages || [];
+  const currentChatStatus = chat.status;
 
 
 
@@ -332,235 +345,14 @@ export default function App() {
     const hasText = Boolean(message.text);
     const hasAttachments = Boolean(message.files?.length);
 
-    if (!apiKey || !(hasText || hasAttachments) || chatsDataRef.current[chatId]?.status !== 'ready') return;
-
-    // Build user message parts
-    const userMessageParts = [];
-
-    // Add text part if present
-    if (message.text) {
-      userMessageParts.push({ type: 'text', text: message.text });
-    }
-
-    // Add file parts for attachments
-    if (message.files && message.files.length > 0) {
-      message.files.forEach(file => {
-        userMessageParts.push({
-          type: 'file',
-          mediaType: file.mediaType,
-          url: file.url
-        });
-      });
-    }
-
-    // Fallback text if no content
-    if (userMessageParts.length === 0) {
-      userMessageParts.push({ type: 'text', text: 'Sent with attachments' });
-    }
-
-    const userMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      parts: userMessageParts
-    };
-
-    const aiMessageId = (Date.now() + 1).toString();
-    const aiMessage = {
-      id: aiMessageId,
-      role: 'assistant',
-      parts: [{ type: 'text', text: '' }],
-      status: 'submitted'
-    };
-
-    // Collect messages for AI (up to the current user message - don't include the empty AI response)
-    // Filter out any messages with errors to avoid sending invalid content to the API
-    const messagesToSend = [...filterMessagesForAPI(chatsDataRef.current[chatId]?.messages || []), userMessage];
-
-    // Update state immediately
-    setChatsData(prev => ({
-      ...prev,
-      [chatId]: {
-        ...prev[chatId],
-        messages: [...prev[chatId].messages, userMessage, aiMessage],
-        status: 'submitted'
-      }
-    }));
-
-    // Create abort controller for this chat
-    const abortController = new AbortController();
-    setAbortControllers(prev => ({ ...prev, [chatId]: abortController }));
+    if (!apiKey || !(hasText || hasAttachments) || chat.status !== 'ready') return;
 
     try {
-      setChatsData(prev => ({
-        ...prev,
-        [chatId]: { ...prev[chatId], status: 'streaming' }
-      }));
-
-      // Consume the UI message stream and handle completion
-      try {
-        console.log('🚀 Starting stream consumption...');
-
-        // Enable tools by default
-        const result = await generateResponse(selectedModel.id, selectedModel.type, messagesToSend, apiKey, {
-          enableTools: true,
-          system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
-          abortSignal: abortController.signal,
-        });
-
-        console.log('✅ generateResponse completed successfully');
-
-        for await (const uiMessage of result.consumeUIMessageStream()) {
-          // Check for error parts
-          if (uiMessage.type === 'error') {
-            throw uiMessage.error;
-          }
-
-          // Check if generation was stopped
-          if (chatsDataRef.current[chatId]?.status !== 'streaming') {
-            console.log('⏹️ Generation was stopped, breaking out of loop');
-            break;
-          }
-
-          // Update the AI message with streaming parts
-          setChatsData(prev => ({
-            ...prev,
-            [chatId]: {
-              ...prev[chatId],
-              messages: prev[chatId].messages.map(msg =>
-                msg.id === aiMessageId
-                  ? { ...msg, parts: uiMessage.parts, status: 'streaming' }
-                  : msg
-              )
-            }
-          }));
-        }
-
-        console.log('✅ Stream consumption completed successfully');
-
-        // Mark as completed
-        setChatsData(prev => ({
-          ...prev,
-          [chatId]: {
-            ...prev[chatId],
-            status: 'ready',
-            messages: prev[chatId].messages.map(msg =>
-              msg.id === aiMessageId ? { ...msg, status: 'ready' } : msg
-            )
-          }
-        }));
-
-        // Clean up abort controller on successful completion
-        setAbortControllers(prev => {
-          const newControllers = { ...prev };
-          delete newControllers[chatId];
-          return newControllers;
-        });
-
-      } catch (streamError) {
-        console.error('❌ Error during streaming or completion:', streamError);
-
-        // Check if this was due to user-initiated abortion
-        const controller = abortControllers[chatId];
-        const wasAborted = controller?.signal.aborted;
-
-        if (wasAborted) {
-          console.log('🛑 Stream was aborted by user, not displaying as error');
-          // For aborted streams, just ensure status is ready and don't modify the message
-          flushSync(() => setChatsData(prev => ({
-            ...prev,
-            [chatId]: {
-              ...prev[chatId],
-              status: 'ready',
-              messages: prev[chatId].messages.map(msg =>
-                msg.id === aiMessageId ? { ...msg, status: 'ready' } : msg
-              )
-            }
-          })));
-          return;
-        }
-
-        // Format the error directly for UI display
-        const errorForUI = createErrorForUI(streamError);
-
-        // Update the message with error details
-        flushSync(() => setChatsData(prev => ({
-          ...prev,
-          [chatId]: {
-            ...prev[chatId],
-            status: 'ready', // Allow sending again after error
-            messages: prev[chatId].messages.map(msg =>
-              msg.id === aiMessageId
-                ? {
-                    ...msg,
-                    status: 'error',
-                    parts: [{
-                      type: 'tool-error',
-                      state: 'output-error',
-                      toolCallId: 'error',
-                      errorText: errorForUI.error,
-                      ...errorForUI
-                    }]
-                  }
-                : msg
-            )
-          }
-        })));
-
-        // Don't continue to the finally block if we've handled the error
-        return;
-      }
-
+      // Use our chat hook to send the message
+      await chat.sendMessage(message);
     } catch (error) {
-      console.error('Error generating response:', error);
-
-      // Format the error directly for UI display
-      const errorForUI = createErrorForUI(error);
-
-      flushSync(() => setChatsData(prev => ({
-        ...prev,
-        [chatId]: {
-          ...prev[chatId],
-          status: 'ready', // Allow sending again after error
-          messages: prev[chatId].messages.map(msg =>
-            msg.id === aiMessageId
-              ? {
-                  ...msg,
-                  status: 'error',
-                  parts: [{
-                    type: 'tool-error',
-                    state: 'output-error',
-                    toolCallId: 'error',
-                    errorText: errorForUI.error,
-                    ...errorForUI
-                  }]
-                }
-              : msg
-          )
-        }
-      })));
-    } finally {
-      // Clean up abort controller
-      setAbortControllers(prev => {
-        const newControllers = { ...prev };
-        delete newControllers[chatId];
-        return newControllers;
-      });
-
-      // Save messages regardless of outcome, using the ref to get latest state
-      const finalMessages = chatsDataRef.current[chatId]?.messages || [];
-      const updatedChatsList = await saveChatMessages(chatId, finalMessages);
-
-      if (updatedChatsList) {
-        setChatsData(prev => {
-          const newChatsData = { ...prev };
-          updatedChatsList.forEach(meta => {
-            if (newChatsData[meta.id]) {
-              newChatsData[meta.id].metadata = meta;
-            }
-          });
-          return newChatsData;
-        });
-      }
+      console.error('Error sending message:', error);
+      // Error handling is managed by the useOpenCodeChat hook
     }
   };
 
@@ -825,41 +617,10 @@ export default function App() {
   };
 
   const stopGeneration = async () => {
-    const chatToStop = currentChatId;
-    if (!chatToStop || chatsDataRef.current[chatToStop]?.status !== 'streaming') return;
+    if (chat.status !== 'streaming') return;
 
-    // Abort the controller if it exists
-    const controller = abortControllers[chatToStop];
-    if (controller) {
-      controller.abort();
-    }
-
-    setChatsData(prev => ({
-      ...prev,
-      [chatToStop]: {
-        ...prev[chatToStop],
-        status: 'ready',
-        messages: prev[chatToStop].messages.map(msg =>
-          msg.status === 'streaming' ? { ...msg, status: 'ready' } : msg
-        )
-      }
-    }));
-
-    // Save the partially generated messages
-    const finalMessages = chatsDataRef.current[chatToStop]?.messages || [];
-    const updatedChatsList = await saveChatMessages(chatToStop, finalMessages);
-
-    if (updatedChatsList) {
-      setChatsData(prev => {
-        const newChatsData = { ...prev };
-        updatedChatsList.forEach(meta => {
-          if (newChatsData[meta.id]) {
-            newChatsData[meta.id].metadata = meta;
-          }
-        });
-        return newChatsData;
-      });
-    }
+    // Use our chat hook to stop generation
+    chat.stop();
   };
 
   if (isApiKeyLoading || isModelLoading || isInitialDataLoading) {
