@@ -779,6 +779,13 @@ export default function App() {
                        >
                          Dismiss
                        </button>
+                       <button
+                         type="button"
+                         onClick={() => chat.resetChatState()}
+                         className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-muted text-muted-foreground hover:bg-muted/80 h-8 px-3"
+                       >
+                         Reset Chat
+                       </button>
                      </div>
                    </div>
                  </div>

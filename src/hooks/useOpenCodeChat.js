@@ -53,8 +53,54 @@ export function useOpenCodeChat({
     }
   }, [apiKey]);
 
+  // Helper function to filter valid messages for API calls
+  const filterMessagesForAPI = useCallback((messages) => {
+    return messages.filter(msg => {
+      // Exclude error status messages
+      if (msg.status === 'error') return false;
+
+      // Exclude messages with error parts
+      if (msg.parts?.some(part =>
+        part.type === 'tool-error' ||
+        (part.type?.startsWith('tool-') && part.state === 'output-error')
+      )) return false;
+
+      // Exclude empty assistant messages
+      if (msg.role === 'assistant' && (!msg.parts || msg.parts.length === 0)) return false;
+
+      return true;
+    });
+  }, []);
+
+  // Helper function to check if we can send messages
+  const canSendMessage = useCallback(() => {
+    return status === 'ready' && !error && apiKey && currentChatId;
+  }, [status, error, apiKey, currentChatId]);
+
+  // Reset chat state for severe error cases
+  const resetChatState = useCallback(() => {
+    setError(null);
+    setStatus('ready');
+    const cleanMessages = filterMessagesForAPI(messages);
+    setMessages(cleanMessages);
+    setChatsData(prev => ({
+      ...prev,
+      [currentChatId]: {
+        ...prev[currentChatId],
+        status: 'ready',
+        messages: cleanMessages
+      }
+    }));
+  }, [currentChatId, setChatsData, filterMessagesForAPI, messages]);
+
   // Custom sendMessage that integrates with your chat system
   const sendMessage = useCallback(async (message) => {
+    console.log('📤 [sendMessage] Called with:', {
+      text: message.text,
+      files: message.files?.length || 0,
+      model: selectedModel.id,
+      status: statusRef.current
+    });
     // Test connectivity first (only on first message to avoid spam)
     if (messages.length === 0) {
       const connectivityOk = await testConnectivity();
@@ -69,8 +115,16 @@ export function useOpenCodeChat({
       }
     }
 
-    if (!currentChatId || !apiKey || status !== 'ready') {
-      return;
+    // Check if we can send messages (more robust for retry scenarios)
+    if (!apiKey || !currentChatId) return;
+
+    // If status is not ready, try to clear error and check again
+    if (statusRef.current !== 'ready') {
+      if (error) {
+        await clearError();
+      }
+      // Check again after clearing error
+      if (statusRef.current !== 'ready') return;
     }
 
     const hasText = Boolean(message.text);
@@ -118,9 +172,7 @@ export function useOpenCodeChat({
     };
 
     // Filter existing messages (exclude errors)
-    const existingMessages = messages.filter(msg =>
-      !msg.parts?.some(part => part.type === 'tool-error')
-    );
+    const existingMessages = filterMessagesForAPI(messages);
 
     const allMessages = [...existingMessages, userMessage];
 
@@ -284,61 +336,106 @@ export function useOpenCodeChat({
   // Clear error
   const clearError = useCallback(() => {
     setError(null);
-    // Reset status to ready when error is cleared
-    if (status === 'error') {
-      setStatus('ready');
-      setChatsData(prev => ({
-        ...prev,
-        [currentChatId]: {
-          ...prev[currentChatId],
-          status: 'ready'
-        }
-      }));
-    }
-  }, [status, currentChatId, setChatsData]);
+    // Reset status to ready regardless of current state (more robust)
+    setStatus('ready');
+    statusRef.current = 'ready'; // Update ref immediately
+    setChatsData(prev => ({
+      ...prev,
+      [currentChatId]: {
+        ...prev[currentChatId],
+        status: 'ready',
+        // Clean up any error messages
+        messages: filterMessagesForAPI(prev[currentChatId]?.messages || [])
+      }
+    }));
+  }, [currentChatId, setChatsData, filterMessagesForAPI]);
 
   // Retry last message
   const reload = useCallback(async () => {
+    console.log('🔄 [reload] Called. Current messages count:', messages.length);
+    console.log('🔄 [reload] Current messages:', messages);
+
     if (messages.length === 0) return;
 
-    // Clear error before retrying
+    // Clear all error states first
     setError(null);
-    if (status === 'error') {
+    setStatus('ready');
+    setChatsData(prev => ({
+      ...prev,
+      [currentChatId]: {
+        ...prev[currentChatId],
+        status: 'ready',
+        // Clean up error messages
+        messages: filterMessagesForAPI(prev[currentChatId]?.messages || [])
+      }
+    }));
+
+    // Wait a tick for state to settle
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // Get fresh messages after state updates
+    const currentMessages = filterMessagesForAPI(messages);
+    console.log('🔄 [reload] Fresh messages after filtering:', currentMessages);
+
+    // Find the last valid user message (not failed)
+    const lastUserMessage = currentMessages.findLast(msg =>
+      msg.role === 'user' && msg.status !== 'error'
+    );
+
+    if (!lastUserMessage) {
+      console.log('🔄 [reload] No valid user message found to retry');
+      return;
+    }
+
+    console.log('🔄 [reload] Found user message to retry:', lastUserMessage);
+
+    // Remove all assistant messages after the last user message
+    const messagesToRetry = currentMessages.filter(msg =>
+      !(msg.role === 'assistant' && msg.id > lastUserMessage.id)
+    );
+
+    console.log('🔄 [reload] Messages to retry after cleanup:', messagesToRetry);
+
+    // Ensure clean state before retry
+    setMessages(messagesToRetry);
+    setChatsData(prev => ({
+      ...prev,
+      [currentChatId]: {
+        ...prev[currentChatId],
+        messages: messagesToRetry,
+        status: 'ready'
+      }
+    }));
+    setStatus('ready');
+    setError(null);
+
+    // Wait another tick for UI to update
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    // Double-check status is ready before proceeding
+    // Use statusRef to avoid stale closure issues
+    if (statusRef.current !== 'ready') {
+      console.log('🔄 [reload] Status still not ready after clear, forcing update');
       setStatus('ready');
-      setChatsData(prev => ({
-        ...prev,
-        [currentChatId]: {
-          ...prev[currentChatId],
-          status: 'ready'
-        }
-      }));
+      statusRef.current = 'ready'; // Update ref directly
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
 
-    const lastUserMessage = messages.findLast(msg => msg.role === 'user');
-    if (lastUserMessage) {
-      // Remove the last assistant message and retry
-      const messagesWithoutLastAssistant = messages.filter(msg =>
-        !(msg.role === 'assistant' && msg.id > lastUserMessage.id)
-      );
-
-      setMessages(messagesWithoutLastAssistant);
-      setChatsData(prev => ({
-        ...prev,
-        [currentChatId]: {
-          ...prev[currentChatId],
-          messages: messagesWithoutLastAssistant
-        }
-      }));
-
-      await sendMessage({
-        text: lastUserMessage.parts.find(p => p.type === 'text')?.text || '',
-        files: lastUserMessage.parts.filter(p => p.type === 'file').map(p => ({
-          mediaType: p.mediaType,
-          url: p.url
-        }))
-      });
-    }
-  }, [messages, currentChatId, setChatsData, sendMessage, status, setError]);
+    // Retry the message
+    console.log('🔄 [reload] Retrying message with model:', selectedModel.id);
+    console.log('🔄 [reload] Message content:', {
+      text: lastUserMessage.parts.find(p => p.type === 'text')?.text || '',
+      files: lastUserMessage.parts.filter(p => p.type === 'file').length
+    });
+    console.log('🔄 [reload] Final status before sending:', statusRef.current);
+    await sendMessage({
+      text: lastUserMessage.parts.find(p => p.type === 'text')?.text || '',
+      files: lastUserMessage.parts.filter(p => p.type === 'file').map(p => ({
+        mediaType: p.mediaType,
+        url: p.url
+      }))
+    });
+  }, [messages, currentChatId, setChatsData, sendMessage, filterMessagesForAPI, selectedModel]);
 
   return {
     messages,
@@ -348,5 +445,6 @@ export function useOpenCodeChat({
     stop,
     clearError,
     reload,
+    resetChatState,
   };
 }
