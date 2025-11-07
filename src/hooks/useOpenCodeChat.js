@@ -298,8 +298,31 @@ export function useOpenCodeChat({
         }
       }));
 
-      // Save to Chrome storage
-      await saveChatMessages(currentChatId, finalMessages);
+      // Save to Chrome storage and get updated chats list
+      console.log('💾 [useOpenCodeChat] Saving messages and updating metadata...');
+      const updatedChats = await saveChatMessages(currentChatId, finalMessages);
+
+      // Update chatsData with the new metadata (including updated title)
+      if (updatedChats && Array.isArray(updatedChats)) {
+        console.log('📝 [useOpenCodeChat] Updating chatsData with new metadata');
+        console.log('📝 [useOpenCodeChat] Updated chats:', updatedChats);
+        // Find the updated metadata for the current chat
+        const currentChatMetadata = updatedChats.find(c => c.id === currentChatId);
+        if (currentChatMetadata) {
+          console.log('📝 [useOpenCodeChat] Found updated metadata for current chat:', currentChatMetadata);
+          setChatsData(prev => ({
+            ...prev,
+            [currentChatId]: {
+              ...prev[currentChatId],
+              metadata: currentChatMetadata
+            }
+          }));
+        } else {
+          console.warn('⚠️ [useOpenCodeChat] No metadata found for current chat:', currentChatId);
+        }
+      } else {
+        console.warn('⚠️ [useOpenCodeChat] No updated chats returned from saveChatMessages');
+      }
 
     } catch (streamError) {
       console.error('💥 [useOpenCodeChat] Error during streaming:', streamError);
