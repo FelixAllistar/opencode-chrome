@@ -345,11 +345,14 @@ export default function App() {
     const hasText = Boolean(message.text);
     const hasAttachments = Boolean(message.files?.length);
 
-    if (!apiKey || !(hasText || hasAttachments) || chat.status !== 'ready') {
-      // Clear the error if user tries to send a new message
-      if (chat.error) {
-        chat.clearError();
-      }
+    // Follow AI SDK pattern: disable input during error states
+    if (!apiKey || !(hasText || hasAttachments) || chat.status === 'error') {
+      // Don't clear error automatically - let user explicitly dismiss or retry
+      return;
+    }
+
+    // Only allow sending when status is 'ready'
+    if (chat.status !== 'ready') {
       return;
     }
 
@@ -800,7 +803,10 @@ export default function App() {
                            <PromptInputAttachment data={attachment} />
                          )}
                        </PromptInputAttachments>
-                       <PromptInputTextarea inputRef={inputRef} />
+                       <PromptInputTextarea
+          inputRef={inputRef}
+          disabled={chat.status === 'error'}
+        />
                      </PromptInputBody>
                     <PromptInputFooter>
                       <PromptInputTools>

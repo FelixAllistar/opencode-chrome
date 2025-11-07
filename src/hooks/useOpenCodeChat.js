@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { generateResponse } from '../services/ai/client.js';
+import { streamText, convertToModelMessages } from 'ai';
+import { getProvider } from '../services/ai/providers.js';
+import { getTools } from '../services/ai/tools.js';
 import { saveChatMessages } from '../utils/chatStorage.js';
-import { createErrorForUI } from '../utils/errorHandling.js';
 
 /**
  * Custom hook that provides useChat-like functionality with OpenCode Zen integration
@@ -53,25 +54,7 @@ export function useOpenCodeChat({
     }
   }, [apiKey]);
 
-  // Helper function to filter valid messages for API calls
-  const filterMessagesForAPI = useCallback((messages) => {
-    return messages.filter(msg => {
-      // Exclude error status messages
-      if (msg.status === 'error') return false;
-
-      // Exclude messages with error parts
-      if (msg.parts?.some(part =>
-        part.type === 'tool-error' ||
-        (part.type?.startsWith('tool-') && part.state === 'output-error')
-      )) return false;
-
-      // Exclude empty assistant messages
-      if (msg.role === 'assistant' && (!msg.parts || msg.parts.length === 0)) return false;
-
-      return true;
-    });
-  }, []);
-
+  
   // Helper function to check if we can send messages
   const canSendMessage = useCallback(() => {
     return status === 'ready' && !error && apiKey && currentChatId;
@@ -81,7 +64,8 @@ export function useOpenCodeChat({
   const resetChatState = useCallback(() => {
     setError(null);
     setStatus('ready');
-    const cleanMessages = filterMessagesForAPI(messages);
+    // Filter out error messages - AI SDK handles clean message preparation
+    const cleanMessages = messages.filter(msg => msg.status !== 'error');
     setMessages(cleanMessages);
     setChatsData(prev => ({
       ...prev,
@@ -91,25 +75,22 @@ export function useOpenCodeChat({
         messages: cleanMessages
       }
     }));
-  }, [currentChatId, setChatsData, filterMessagesForAPI, messages]);
+  }, [currentChatId, setChatsData, messages]);
 
   // Custom sendMessage that integrates with your chat system
   const sendMessage = useCallback(async (message) => {
-    console.log('📤 [sendMessage] Called with:', {
-      text: message.text,
-      files: message.files?.length || 0,
-      model: selectedModel.id,
-      status: statusRef.current
-    });
-    // Test connectivity first (only on first message to avoid spam)
+        // Test connectivity first (only on first message to avoid spam)
     if (messages.length === 0) {
       const connectivityOk = await testConnectivity();
       if (!connectivityOk) {
-        const connectivityError = new Error('Failed to connect to OpenCode API. Please check your internet connection and API key.');
-        const errorForUI = createErrorForUI(connectivityError);
-        setError(errorForUI);
+        const error = {
+          name: 'ConnectivityError',
+          message: 'Failed to connect to OpenCode API. Please check your internet connection and API key.',
+          error: 'Failed to connect to OpenCode API. Please check your internet connection and API key.' // For UI compatibility
+        };
+        setError(error);
         if (onError) {
-          onError(errorForUI);
+          onError(error);
         }
         return;
       }
@@ -171,10 +152,8 @@ export function useOpenCodeChat({
       status: 'submitted'
     };
 
-    // Filter existing messages (exclude errors)
-    const existingMessages = filterMessagesForAPI(messages);
-
-    const allMessages = [...existingMessages, userMessage];
+    // AI SDK handles message filtering automatically
+    const allMessages = [...messages, userMessage];
 
     // Update state immediately
     const initialMessages = [...allMessages, aiMessage];
@@ -199,6 +178,7 @@ export function useOpenCodeChat({
 
     try {
       setStatus('streaming');
+      statusRef.current = 'streaming'; // Update ref immediately
       setChatsData(prev => ({
         ...prev,
         [currentChatId]: {
@@ -207,63 +187,223 @@ export function useOpenCodeChat({
         }
       }));
 
-      const result = await generateResponse(
-        selectedModel.id,
-        selectedModel.type,
-        allMessages,
-        apiKey,
-        {
-          enableTools: true,
-          system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
-          abortSignal: abortControllerRef.current.signal,
+      // Use AI SDK's streamText directly with proper error handling
+      const result = await streamText({
+        model: getProvider(selectedModel.id, selectedModel.type, apiKey),
+        messages: convertToModelMessages(allMessages),
+        tools: getTools(),
+        system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
+        abortSignal: abortControllerRef.current.signal,
+        onError: ({ error }) => {
+          // Let AI SDK handle the error gracefully - don't throw
+          // The error will be processed through the stream
         }
-      );
+      });
 
-      // Validate stream before consumption
-      if (!result || typeof result.consumeUIMessageStream !== 'function') {
-        throw new Error('Invalid result object or missing consumeUIMessageStream method');
+      let accumulatedText = '';
+      let toolCalls = [];
+      let reasoningParts = [];
+      let currentTextId = null;
+
+      // Use AI SDK's fullStream for better chunk handling
+      for await (const chunk of result.fullStream) {
+
+        // Check current streaming status using ref to avoid stale closure
+        if (statusRef.current !== 'streaming') {
+          break;
+        }
+
+        switch (chunk.type) {
+          case 'text-delta':
+            if (chunk.text) {
+              accumulatedText += chunk.text;
+            }
+            break;
+
+          case 'text-start':
+            // Start of text - track the ID
+            currentTextId = chunk.id;
+            break;
+
+          case 'text-end':
+            // End of text - clear the ID
+            currentTextId = null;
+            break;
+
+          case 'error':
+            // AI SDK error chunk - handle gracefully without throwing
+
+            // Create error object for UI compatibility
+            const errorObj = {
+              name: chunk.error.name || 'AI_APICallError',
+              message: chunk.error.message || 'An error occurred during streaming',
+              error: chunk.error.message || 'An error occurred during streaming',
+              cause: chunk.error.cause,
+              stack: chunk.error.stack
+            };
+
+            // Set error state for this specific message
+            currentStreamingMessages = currentStreamingMessages.map(msg =>
+              msg.id === aiMessageId ? { ...msg, status: 'error' } : msg
+            );
+
+            setMessages(currentStreamingMessages);
+            setStatus('error');
+            statusRef.current = 'error';
+            setError(errorObj);
+            setChatsData(prev => ({
+              ...prev,
+              [currentChatId]: {
+                ...prev[currentChatId],
+                messages: currentStreamingMessages,
+                status: 'error'
+              }
+            }));
+
+            if (onError) {
+              onError(errorObj);
+            }
+
+            // Save error state
+            saveChatMessages(currentChatId, currentStreamingMessages);
+            break;
+
+          case 'tool-call':
+            toolCalls.push({
+              type: `tool-${chunk.toolName}`,
+              toolCallId: chunk.toolCallId,
+              toolName: chunk.toolName,
+              args: chunk.args,
+              state: 'input-available'
+            });
+            break;
+
+          case 'tool-result':
+            // Update tool call with result
+            toolCalls = toolCalls.map(call =>
+              call.toolCallId === chunk.toolCallId
+                ? {
+                    ...call,
+                    result: chunk.result,
+                    state: 'output-available',
+                    output: chunk.result
+                  }
+                : call
+            );
+            break;
+
+          case 'reasoning':
+            reasoningParts.push({
+              type: 'reasoning',
+              text: chunk.text || chunk.reasoning || ''
+            });
+            break;
+
+          case 'reasoning-start':
+            // Start reasoning - initialize
+            if (!reasoningParts.find(p => p.id === chunk.id)) {
+              reasoningParts.push({
+                id: chunk.id,
+                type: 'reasoning',
+                text: ''
+              });
+            }
+            break;
+
+          case 'reasoning-delta':
+            // Append to existing reasoning part
+            const reasoningIndex = reasoningParts.findIndex(p => p.id === chunk.id);
+            if (reasoningIndex >= 0) {
+              reasoningParts[reasoningIndex].text += chunk.text;
+            } else {
+              reasoningParts.push({
+                id: chunk.id,
+                type: 'reasoning',
+                text: chunk.text
+              });
+            }
+            break;
+
+          case 'reasoning-end':
+            // Reasoning completed
+            break;
+
+          case 'finish':
+            // Stream completed
+            break;
+
+          case 'start':
+          case 'start-step':
+          case 'finish-step':
+            // Control chunks, ignore for content
+            break;
+
+          default:
+            // Ignore unknown chunks
+            continue;
+        }
+
+        // Build parts array in the format the UI expects
+        let updatedParts = [];
+
+        // Add reasoning parts first (remove internal id)
+        if (reasoningParts.length > 0) {
+          const cleanReasoningParts = reasoningParts.map(({ id, ...part }) => part);
+          updatedParts.push(...cleanReasoningParts);
+        }
+
+        // Add tool calls
+        if (toolCalls.length > 0) {
+          updatedParts.push(...toolCalls);
+        }
+
+        // Add text if we have any
+        if (accumulatedText) {
+          updatedParts.push({ type: 'text', text: accumulatedText });
+        }
+
+        
+        // Update the AI message with current parts
+        currentStreamingMessages = currentStreamingMessages.map(msg =>
+          msg.id === aiMessageId
+            ? { ...msg, parts: updatedParts, status: 'streaming' }
+            : msg
+        );
+
+        setMessages(currentStreamingMessages);
+        setChatsData(prev => ({
+          ...prev,
+          [currentChatId]: {
+            ...prev[currentChatId],
+            messages: currentStreamingMessages
+          }
+        }));
       }
 
-      try {
-        for await (const uiMessage of result.consumeUIMessageStream()) {
-          // Check for error parts
-          if (uiMessage && uiMessage.type === 'error') {
-            throw uiMessage.error;
-          }
+      // Build final parts array one more time to ensure everything is included
+      let finalParts = [];
 
-          // Check current streaming status using ref to avoid stale closure
-          if (statusRef.current !== 'streaming') {
-            break;
-          }
+      // Add reasoning parts first (remove internal id)
+      if (reasoningParts.length > 0) {
+        const cleanReasoningParts = reasoningParts.map(({ id, ...part }) => part);
+        finalParts.push(...cleanReasoningParts);
+      }
 
-          // Validate uiMessage structure
-          if (!uiMessage || typeof uiMessage !== 'object') {
-            continue;
-          }
+      // Add tool calls
+      if (toolCalls.length > 0) {
+        finalParts.push(...toolCalls);
+      }
 
-          // Update the AI message with streaming parts
-          currentStreamingMessages = currentStreamingMessages.map(msg =>
-            msg.id === aiMessageId
-              ? { ...msg, parts: uiMessage.parts || [], status: 'streaming' }
-              : msg
-          );
-
-          setMessages(currentStreamingMessages);
-          setChatsData(prev => ({
-            ...prev,
-            [currentChatId]: {
-              ...prev[currentChatId],
-              messages: currentStreamingMessages
-            }
-          }));
-        }
-      } catch (streamConsumptionError) {
-        throw streamConsumptionError;
+      // Add text if we have any
+      if (accumulatedText) {
+        finalParts.push({ type: 'text', text: accumulatedText });
       }
 
       // Mark as completed using the latest streaming messages
       const finalMessages = currentStreamingMessages.map(msg =>
-        msg.id === aiMessageId ? { ...msg, status: 'ready' } : msg
+        msg.id === aiMessageId
+          ? { ...msg, parts: finalParts, status: 'ready' }
+          : msg
       );
 
       setMessages(finalMessages);
@@ -296,8 +436,16 @@ export function useOpenCodeChat({
       }
 
     } catch (streamError) {
-      const errorForUI = createErrorForUI(streamError);
-      setError(errorForUI);
+      // Use AI SDK's built-in error structure but maintain UI compatibility
+      const error = {
+        name: streamError.name || 'StreamError',
+        message: streamError.message || 'An error occurred during streaming',
+        error: streamError.message || 'An error occurred during streaming', // For UI compatibility
+        cause: streamError.cause,
+        stack: streamError.stack
+      };
+
+      setError(error);
 
       const errorMessages = currentStreamingMessages.map(msg =>
         msg.id === aiMessageId ? { ...msg, status: 'error' } : msg
@@ -305,6 +453,7 @@ export function useOpenCodeChat({
 
       setMessages(errorMessages);
       setStatus('error');
+      statusRef.current = 'error'; // Update ref immediately
       setChatsData(prev => ({
         ...prev,
         [currentChatId]: {
@@ -315,7 +464,7 @@ export function useOpenCodeChat({
       }));
 
       if (onError) {
-        onError(errorForUI);
+        onError(error);
       }
 
       // Save error state
@@ -324,7 +473,7 @@ export function useOpenCodeChat({
     } finally {
       abortControllerRef.current = null;
     }
-  }, [currentChatId, messages, status, apiKey, selectedModel, chatsData, setChatsData, onError, testConnectivity]);
+  }, [currentChatId, messages, apiKey, selectedModel, chatsData, setChatsData, onError, testConnectivity]);
 
   // Stop generation
   const stop = useCallback(() => {
@@ -333,10 +482,10 @@ export function useOpenCodeChat({
     }
   }, []);
 
-  // Clear error
+  // Clear error - only called explicitly by user action
   const clearError = useCallback(() => {
     setError(null);
-    // Reset status to ready regardless of current state (more robust)
+    // Reset status to ready when explicitly clearing error
     setStatus('ready');
     statusRef.current = 'ready'; // Update ref immediately
     setChatsData(prev => ({
@@ -344,38 +493,23 @@ export function useOpenCodeChat({
       [currentChatId]: {
         ...prev[currentChatId],
         status: 'ready',
-        // Clean up any error messages
-        messages: filterMessagesForAPI(prev[currentChatId]?.messages || [])
+        // Keep existing messages, don't filter aggressively
+        messages: prev[currentChatId]?.messages || []
       }
     }));
-  }, [currentChatId, setChatsData, filterMessagesForAPI]);
+  }, [currentChatId, setChatsData]);
 
-  // Retry last message
+  // Retry last message - preserve error state until successful retry
   const reload = useCallback(async () => {
-    console.log('🔄 [reload] Called. Current messages count:', messages.length);
-    console.log('🔄 [reload] Current messages:', messages);
-
     if (messages.length === 0) return;
 
-    // Clear all error states first
-    setError(null);
+    // Don't clear error state - let it be cleared by successful retry
+    // Only clear status to allow new attempt
     setStatus('ready');
-    setChatsData(prev => ({
-      ...prev,
-      [currentChatId]: {
-        ...prev[currentChatId],
-        status: 'ready',
-        // Clean up error messages
-        messages: filterMessagesForAPI(prev[currentChatId]?.messages || [])
-      }
-    }));
+    statusRef.current = 'ready';
 
-    // Wait a tick for state to settle
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    // Get fresh messages after state updates
-    const currentMessages = filterMessagesForAPI(messages);
-    console.log('🔄 [reload] Fresh messages after filtering:', currentMessages);
+    // Get current messages including error messages
+    const currentMessages = messages;
 
     // Find the last valid user message (not failed)
     const lastUserMessage = currentMessages.findLast(msg =>
@@ -383,18 +517,13 @@ export function useOpenCodeChat({
     );
 
     if (!lastUserMessage) {
-      console.log('🔄 [reload] No valid user message found to retry');
       return;
     }
-
-    console.log('🔄 [reload] Found user message to retry:', lastUserMessage);
 
     // Remove all assistant messages after the last user message
     const messagesToRetry = currentMessages.filter(msg =>
       !(msg.role === 'assistant' && msg.id > lastUserMessage.id)
     );
-
-    console.log('🔄 [reload] Messages to retry after cleanup:', messagesToRetry);
 
     // Ensure clean state before retry
     setMessages(messagesToRetry);
@@ -407,7 +536,7 @@ export function useOpenCodeChat({
       }
     }));
     setStatus('ready');
-    setError(null);
+    // Don't clear error state - let successful retry clear it automatically
 
     // Wait another tick for UI to update
     await new Promise(resolve => setTimeout(resolve, 10));
@@ -415,19 +544,10 @@ export function useOpenCodeChat({
     // Double-check status is ready before proceeding
     // Use statusRef to avoid stale closure issues
     if (statusRef.current !== 'ready') {
-      console.log('🔄 [reload] Status still not ready after clear, forcing update');
       setStatus('ready');
       statusRef.current = 'ready'; // Update ref directly
       await new Promise(resolve => setTimeout(resolve, 50));
     }
-
-    // Retry the message
-    console.log('🔄 [reload] Retrying message with model:', selectedModel.id);
-    console.log('🔄 [reload] Message content:', {
-      text: lastUserMessage.parts.find(p => p.type === 'text')?.text || '',
-      files: lastUserMessage.parts.filter(p => p.type === 'file').length
-    });
-    console.log('🔄 [reload] Final status before sending:', statusRef.current);
     await sendMessage({
       text: lastUserMessage.parts.find(p => p.type === 'text')?.text || '',
       files: lastUserMessage.parts.filter(p => p.type === 'file').map(p => ({
@@ -435,7 +555,7 @@ export function useOpenCodeChat({
         url: p.url
       }))
     });
-  }, [messages, currentChatId, setChatsData, sendMessage, filterMessagesForAPI, selectedModel]);
+  }, [messages, currentChatId, setChatsData, sendMessage, selectedModel]);
 
   return {
     messages,
