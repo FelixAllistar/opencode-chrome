@@ -47,10 +47,11 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 - App loading logic: on mount, read the chat list + `opencode_current_chat` from storage, hydrate `chatsData`, reset any lingering `streaming`/`submitted` statuses to `ready`, and set `currentChatId`. Switching chats loads messages on demand (if they haven’t been cached yet) and focuses the input.
 
 ### Hooks & AI services
-+ `src/hooks/useOpenCodeChat.js` is the streaming hook at the heart of the experience. It uses `streamText` (from the `ai` package) with `convertToModelMessages`, `getProvider(selectedModel.id, selectedModel.type, apiKey)`, and tools from `src/services/ai/tools.js`. It maintains `messages`, `status`, `error`, and an `AbortController`.
+- `src/hooks/useOpenCodeChat.js` is the streaming hook at the heart of the experience. It uses `streamText` (from the `ai` package) with `convertToModelMessages`, `getProvider(selectedModel.id, selectedModel.type, apiKey)`, and tools from `src/services/ai/tools.js`. It maintains `messages`, `status`, `error`, and an `AbortController`.
   * User messages are assembled from the submitted text and attachments, with attachments turned into `{ type: 'file', mediaType, url }` parts.
   * The assistant answer starts as an empty `parts: [{ type: 'text', text: '' }]` entry with `status: 'submitted'`, transitions to `streaming`, then is finalized to `ready`.
   * The streaming loop handles `text-delta`, `tool-call`, `tool-result`, and `reasoning` chunks, building incremental `parts`, pushing chain-of-thought steps, and updating `chat.messages`. `saveChatMessages` persists the final array, and the returned chats list updates metadata in App state.
+  * The hook now feeds the shared `tools` set into `convertToModelMessages` and `streamText`, and configures `streamText` with `maxToolRoundtrips` plus `stopWhen: stepCountIs(10)` so multi-step tool loops finish cleanly instead of ending as soon as the first tool result shows up.
   * Helpers such as `regenerateResponse`, `stop`, `clearError`, and `resetChatState` let the UI retry/stop streaming or drop to a clean state.
 - When `selectedModel.isVision === false`, the hook filters every `file/image` part out of the context before calling `convertToModelMessages`, so rendered images stay visible to humans but never reach models that can’t handle vision.
 - `src/hooks/useStorage.js` wraps `chrome.storage.sync` with `useState`/`useEffect` so settings are read lazily and expose a loading flag.

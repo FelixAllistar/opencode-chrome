@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { streamText, convertToModelMessages } from 'ai';
+import { streamText, convertToModelMessages, stepCountIs } from 'ai';
 import { getProvider } from '../services/ai/providers.js';
 import { getTools } from '../services/ai/tools.js';
 import { saveChatMessages } from '../utils/chatStorage.js';
@@ -36,6 +36,7 @@ export function useOpenCodeChat({
 
   const currentChatData = chatsData[currentChatId];
   const isVisionModel = Boolean(selectedModel?.isVision ?? true);
+  const tools = getTools();
 
   const prepareMessagesForModel = useCallback(
     (messages) => {
@@ -206,9 +207,11 @@ export function useOpenCodeChat({
 
       const result = await streamText({
         model: getProvider(selectedModel.id, selectedModel.type, apiKey),
-        messages: convertToModelMessages(modelContext),
-        tools: getTools(),
+        messages: convertToModelMessages(modelContext, { tools }),
+        tools,
         system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
+        maxToolRoundtrips: 4,
+        stopWhen: stepCountIs(20),
         abortSignal: abortControllerRef.current.signal,
         onError: ({ error }) => {
           // Let AI SDK handle the error gracefully
@@ -569,9 +572,11 @@ export function useOpenCodeChat({
 
       const result = await streamText({
         model: getProvider(selectedModel.id, selectedModel.type, apiKey),
-        messages: convertToModelMessages(messagesForModel),
-        tools: getTools(),
+        messages: convertToModelMessages(messagesForModel, { tools }),
+        tools,
         system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
+        maxToolRoundtrips: 2,
+        stopWhen: stepCountIs(10),
         abortSignal: abortControllerRef.current.signal,
         onError: ({ error }) => {
           // Let AI SDK handle the error gracefully - don't throw
