@@ -488,6 +488,15 @@ export default function App() {
     return parts; // Return original parts if no conversion needed
   };
 
+  const IMAGE_URL_REGEX = /(https?:\/\/[^\s]+\.(?:png|jpe?g|gif|webp|bmp|svg)(?:\?[^\s]*)?)/gi;
+
+  const extractImageUrlsFromText = (text = '') => {
+    if (!text) return [];
+    const matches = text.match(IMAGE_URL_REGEX);
+    if (!matches) return [];
+    return Array.from(new Set(matches));
+  };
+
   const renderMessageParts = (message) => {
     if (!message.parts || message.parts.length === 0) {
       return message.status === 'streaming' ? (
@@ -568,7 +577,28 @@ export default function App() {
 
             // Text part - use Response component for markdown rendering
             if (part.type === 'text') {
-              return <Response key={`text-${index}`}>{part.text}</Response>;
+              const text = part.text || '';
+              const imageUrls = extractImageUrlsFromText(text);
+
+              return (
+                <div key={`text-${index}`} className="space-y-4">
+                  <Response>{text}</Response>
+                  {imageUrls.length > 0 && (
+                    <div className="flex flex-col gap-4">
+                      {imageUrls.map((url, urlIndex) => (
+                        <div key={`${url}-${urlIndex}`} className="rounded-lg border bg-background p-2">
+                          <img
+                            src={url}
+                            alt="Linked content"
+                            className="max-w-full h-auto rounded-md shadow-sm"
+                            loading="lazy"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
             }
 
             // Image part - display image from URL
