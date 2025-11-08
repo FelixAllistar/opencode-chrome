@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, BrainIcon, SearchIcon } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
@@ -123,6 +123,8 @@ export default function App() {
   const [isDark, setIsDark] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const inputRef = useRef(null);
+  const currentChatIdRef = useRef(currentChatId);
+  const currentChatMessagesRef = useRef([]);
 
   // Handle unhandled promise rejections at the app level
   useEffect(() => {
@@ -192,12 +194,25 @@ export default function App() {
     }
   });
 
+  const chatRef = useRef(chat);
+  useEffect(() => {
+    chatRef.current = chat;
+  }, [chat]);
+
   // The useOpenCodeChat hook handles updating chatsData internally
 
   // Derived state from chatsData
   const chats = Object.values(chatsData).map(c => c.metadata).sort((a, b) => b.updatedAt - a.updatedAt);
   const currentChatMessages = chat.messages || [];
   const currentChatStatus = chat.status;
+
+  useEffect(() => {
+    currentChatIdRef.current = currentChatId;
+  }, [currentChatId]);
+
+  useEffect(() => {
+    currentChatMessagesRef.current = currentChatMessages;
+  }, [currentChatMessages]);
 
 
 
@@ -254,7 +269,7 @@ export default function App() {
     }
   }, [isInitialDataLoading, currentChatId]);
 
-  const createNewChat = async () => {
+  const createNewChat = useCallback(async () => {
     const newChatMetadata = await createChat();
 
     setChatsData(prev => ({
@@ -277,7 +292,7 @@ export default function App() {
     }, 0);
 
     return newChatMetadata.id;
-  };
+  }, [setChatsData, setCurrentChatIdState, setCurrentChatId]);
 
   const switchChat = async (chatId) => {
     if (chatId === currentChatId) return;
@@ -340,7 +355,8 @@ export default function App() {
     setGoogleApiKey(newGoogleApiKey);
   };
 
-  const handleSend = async (message, event) => {
+  const handleSend = useCallback(async (message, event) => {
+    const currentChat = chatRef.current;
     let chatId = currentChatId;
     if (!chatId) {
       chatId = await createNewChat();
@@ -351,24 +367,86 @@ export default function App() {
     const requiredKey = selectedModel?.type === 'google' ? googleApiKey : apiKey;
 
     // Follow AI SDK pattern: disable input during error states
-    if (!requiredKey || !(hasText || hasAttachments) || chat.status === 'error') {
+    if (!requiredKey || !(hasText || hasAttachments) || currentChat.status === 'error') {
       // Don't clear error automatically - let user explicitly dismiss or retry
       return;
     }
 
     // Only allow sending when status is 'ready'
-    if (chat.status !== 'ready') {
+    if (currentChat.status !== 'ready') {
       return;
     }
 
     try {
       // Use our chat hook to send the message
-      await chat.sendMessage(message);
+      await currentChat.sendMessage(message);
     } catch (error) {
       console.error('Error sending message:', error);
       // Error handling is managed by the useOpenCodeChat hook
     }
-  };
+  }, [apiKey, createNewChat, currentChatId, googleApiKey, selectedModel]);
+
+  const handleExternalSelection = useCallback(async (rawText) => {
+    const text = rawText?.trim();
+    if (!text) {
+      return;
+    }
+
+    const hasExistingMessages = currentChatMessagesRef.current.length > 0;
+    const requiresNewChat = !currentChatIdRef.current || hasExistingMessages;
+
+    if (requiresNewChat) {
+      await createNewChat();
+    }
+
+    const textarea = inputRef.current;
+    if (textarea) {
+      textarea.value = text;
+      textarea.form?.requestSubmit();
+    } else {
+      await handleSend({ text });
+    }
+  }, [createNewChat, handleSend]);
+
+  useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.runtime) {
+      return;
+    }
+
+    const handleRuntimeMessage = (message) => {
+      if (message?.type === 'openSidebar_contextSelection') {
+        void handleExternalSelection(message.payload?.text);
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+
+    if (typeof chrome.runtime.sendMessage === 'function') {
+      chrome.runtime.sendMessage(
+        { type: 'openSidebar_getPendingSelections' },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            return;
+          }
+
+          const selections = response?.selections;
+          if (Array.isArray(selections) && selections.length > 0) {
+            (async () => {
+              for (const selection of selections) {
+                if (selection?.text) {
+                  await handleExternalSelection(selection.text);
+                }
+              }
+            })();
+          }
+        }
+      );
+    }
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
+    };
+  }, [handleExternalSelection]);
 
   const changeModel = (modelId) => {
     const model = MODELS.find(m => m.id === modelId);
