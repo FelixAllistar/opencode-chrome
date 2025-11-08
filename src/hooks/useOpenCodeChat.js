@@ -4,6 +4,84 @@ import { getProvider } from '../services/ai/providers.js';
 import { getTools } from '../services/ai/tools.js';
 import { saveChatMessages } from '../utils/chatStorage.js';
 
+const MAX_TOOL_PART_TEXT_LENGTH = 900;
+
+const safeStringify = (value) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return String(value);
+  }
+};
+
+const describeToolPartForModel = (part) => {
+  const toolName = part.toolName ?? part.type?.replace?.('tool-', '') ?? 'tool';
+  const segments = [];
+
+  if (part.state === 'input-available' || part.args || part.input) {
+    const args = part.args ?? part.input;
+    const argsText = safeStringify(args);
+    if (argsText) {
+      segments.push(`${toolName} input: ${argsText}`);
+    }
+  }
+
+  if (part.state === 'output-available' || part.result || part.output) {
+    const output = part.output ?? part.result;
+    const outputText = typeof output === 'string' ? output : safeStringify(output);
+    if (outputText) {
+      segments.push(`${toolName} output: ${outputText}`);
+    }
+  }
+
+  if (segments.length === 0) {
+    return '';
+  }
+
+  const combined = segments.join(' | ');
+  return combined.length > MAX_TOOL_PART_TEXT_LENGTH
+    ? `${combined.slice(0, MAX_TOOL_PART_TEXT_LENGTH)}...`
+    : combined;
+};
+
+const sanitizeMessagePartsForModel = (parts = [], isVisionModel) => {
+  const sanitized = [];
+
+  for (const part of parts) {
+    if (!isVisionModel && isVisualMessagePart(part)) {
+      continue;
+    }
+
+    if (part.type === 'text') {
+      sanitized.push({ ...part });
+      continue;
+    }
+
+    if (part.type === 'reasoning' && part.text) {
+      sanitized.push({ type: 'text', text: part.text });
+      continue;
+    }
+
+    if (part.type?.startsWith?.('tool-')) {
+      const text = describeToolPartForModel(part);
+      if (text) {
+        sanitized.push({ type: 'text', text });
+      }
+      continue;
+    }
+
+    if (isVisionModel) {
+      sanitized.push(part);
+    }
+  }
+
+  return sanitized;
+};
+
 const isVisualMessagePart = (part) => {
   if (!part || typeof part !== 'object') {
     return false;
@@ -40,39 +118,10 @@ export function useOpenCodeChat({
 
   const prepareMessagesForModel = useCallback(
     (messages) => {
-      if (isVisionModel) {
-        return messages;
-      }
-
-      const filteredMessages = [];
-      for (const message of messages) {
-        const originalParts = message.parts || [];
-        if (originalParts.length === 0) {
-          filteredMessages.push(message);
-          continue;
-        }
-
-        const filteredParts = originalParts.filter(
-          (part) => !isVisualMessagePart(part)
-        );
-
-        if (filteredParts.length === 0) {
-          if (message.role === 'user') {
-            filteredMessages.push({
-              ...message,
-              parts: [{ type: 'text', text: 'Sent with attachments' }],
-            });
-          }
-          continue;
-        }
-
-        filteredMessages.push({
-          ...message,
-          parts: filteredParts,
-        });
-      }
-
-      return filteredMessages;
+      return messages.map((message) => ({
+        ...message,
+        parts: sanitizeMessagePartsForModel(message.parts || [], isVisionModel),
+      }));
     },
     [isVisionModel]
   );
