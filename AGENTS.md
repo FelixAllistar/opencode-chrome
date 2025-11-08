@@ -28,7 +28,7 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 - `src/App.jsx` is the control center: it loads chats/metadata via `chatStorage.js`, keeps `chatsData`/`currentChatId`/`chat` state, and wires `useStorage` for `apiKey`, `selectedModelId`, and the current theme.
 - The header pairs a `SidebarTrigger`, a “new chat” button (uses `AppSidebar`/`Sidebar` from `components/ui`), and a settings menu that surfaces the `ThemeSwitcher` and a “Clear All Chats” action.
 - Conversations render with `Branch`, `BranchMessages`, `Message`, and `MessageContent` (all from `src/components/ai-elements`). `renderMessageParts` (inside `App.jsx`) is responsible for chain-of-thought, tool-call, text, and image rendering.
-- A persistent footer holds `PromptInput` plus attachments, a model selector built from `MODELS` (`src/utils/constants.js`), and `PromptInputSubmit` (which uses `chat.status` to show “stop”/“retry” states).
+- A persistent footer holds `PromptInput` plus attachments, a model selector built from `MODELS` (`src/utils/constants.js` – each entry now ships an `isVision` flag so we can skip image parts for non-vision models, and `big-pickle`/`grok-code` are the current non-vision entries), and `PromptInputSubmit` (which uses `chat.status` to show “stop”/“retry” states).
 - `chat` (returned by `useOpenCodeChat`) exposes `messages`, `status`, `error`, and helpers like `sendMessage`, `stop`, `reload`, `clearError`, and `resetChatState`.
 - Theme preference uses `useStorage('theme')` plus `ThemeProvider` (see below) and writes CSS custom properties on `document.documentElement` for real‑time switching.
 - `clearSettings` wipes both `chrome.storage.sync` and `.local` and resets `apiKey`, `selectedModel`, `theme`, and `chatsData`.
@@ -47,11 +47,12 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 - App loading logic: on mount, read the chat list + `opencode_current_chat` from storage, hydrate `chatsData`, reset any lingering `streaming`/`submitted` statuses to `ready`, and set `currentChatId`. Switching chats loads messages on demand (if they haven’t been cached yet) and focuses the input.
 
 ### Hooks & AI services
-- `src/hooks/useOpenCodeChat.js` is the streaming hook at the heart of the experience. It uses `streamText` (from the `ai` package) with `convertToModelMessages`, `getProvider(selectedModel.id, selectedModel.type, apiKey)`, and tools from `src/services/ai/tools.js`. It maintains `messages`, `status`, `error`, and an `AbortController`.
++ `src/hooks/useOpenCodeChat.js` is the streaming hook at the heart of the experience. It uses `streamText` (from the `ai` package) with `convertToModelMessages`, `getProvider(selectedModel.id, selectedModel.type, apiKey)`, and tools from `src/services/ai/tools.js`. It maintains `messages`, `status`, `error`, and an `AbortController`.
   * User messages are assembled from the submitted text and attachments, with attachments turned into `{ type: 'file', mediaType, url }` parts.
   * The assistant answer starts as an empty `parts: [{ type: 'text', text: '' }]` entry with `status: 'submitted'`, transitions to `streaming`, then is finalized to `ready`.
   * The streaming loop handles `text-delta`, `tool-call`, `tool-result`, and `reasoning` chunks, building incremental `parts`, pushing chain-of-thought steps, and updating `chat.messages`. `saveChatMessages` persists the final array, and the returned chats list updates metadata in App state.
   * Helpers such as `regenerateResponse`, `stop`, `clearError`, and `resetChatState` let the UI retry/stop streaming or drop to a clean state.
+- When `selectedModel.isVision === false`, the hook filters every `file/image` part out of the context before calling `convertToModelMessages`, so rendered images stay visible to humans but never reach models that can’t handle vision.
 - `src/hooks/useStorage.js` wraps `chrome.storage.sync` with `useState`/`useEffect` so settings are read lazily and expose a loading flag.
 - `src/hooks/use-mobile.ts` offers `useIsMobile`, which `src/components/ui/sidebar.tsx` consumes to switch between drawer and rail/sidebar layouts.
 - `src/services/ai/providers.js` creates an OpenAI-compatible provider pointing at `https://opencode.ai/zen/v1`; `services/ai/client.js` re-exports `getProvider` and `getTools` for future use.

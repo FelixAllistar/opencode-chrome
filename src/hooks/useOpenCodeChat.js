@@ -4,6 +4,19 @@ import { getProvider } from '../services/ai/providers.js';
 import { getTools } from '../services/ai/tools.js';
 import { saveChatMessages } from '../utils/chatStorage.js';
 
+const isVisualMessagePart = (part) => {
+  if (!part || typeof part !== 'object') {
+    return false;
+  }
+  if (part.type === 'image') {
+    return true;
+  }
+  if (part.type === 'file') {
+    return Boolean(part.mediaType?.startsWith?.('image/'));
+  }
+  return false;
+};
+
 /**
  * Custom hook that provides useChat-like functionality with OpenCode Zen integration
  */
@@ -22,6 +35,46 @@ export function useOpenCodeChat({
   const statusRef = useRef(status);
 
   const currentChatData = chatsData[currentChatId];
+  const isVisionModel = Boolean(selectedModel?.isVision ?? true);
+
+  const prepareMessagesForModel = useCallback(
+    (messages) => {
+      if (isVisionModel) {
+        return messages;
+      }
+
+      const filteredMessages = [];
+      for (const message of messages) {
+        const originalParts = message.parts || [];
+        if (originalParts.length === 0) {
+          filteredMessages.push(message);
+          continue;
+        }
+
+        const filteredParts = originalParts.filter(
+          (part) => !isVisualMessagePart(part)
+        );
+
+        if (filteredParts.length === 0) {
+          if (message.role === 'user') {
+            filteredMessages.push({
+              ...message,
+              parts: [{ type: 'text', text: 'Sent with attachments' }],
+            });
+          }
+          continue;
+        }
+
+        filteredMessages.push({
+          ...message,
+          parts: filteredParts,
+        });
+      }
+
+      return filteredMessages;
+    },
+    [isVisionModel]
+  );
 
   // Update messages when current chat changes
   const chatsDataRef = useRef();
@@ -149,9 +202,11 @@ export function useOpenCodeChat({
 
     try {
       // Use AI SDK's streamText directly with proper error handling
+      const modelContext = prepareMessagesForModel(contextMessages);
+
       const result = await streamText({
         model: getProvider(selectedModel.id, selectedModel.type, apiKey),
-        messages: convertToModelMessages(contextMessages),
+        messages: convertToModelMessages(modelContext),
         tools: getTools(),
         system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
         abortSignal: abortControllerRef.current.signal,
@@ -510,9 +565,11 @@ export function useOpenCodeChat({
       }));
 
       // Use AI SDK's streamText directly with proper error handling
+      const messagesForModel = prepareMessagesForModel(allMessages);
+
       const result = await streamText({
         model: getProvider(selectedModel.id, selectedModel.type, apiKey),
-        messages: convertToModelMessages(allMessages),
+        messages: convertToModelMessages(messagesForModel),
         tools: getTools(),
         system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
         abortSignal: abortControllerRef.current.signal,
