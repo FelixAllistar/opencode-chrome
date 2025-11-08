@@ -1,144 +1,135 @@
 # Agent Guidelines for OpenCode Browser Extension
 
-NEVER run pnpm build or pnpm run dev. the user will be responsible for building. 
+NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for producing artifacts. Respect that even though Vite is configured, builds/watch mode are off-limits during your work.
 
 ## Commands
-- **Build**: `pnpm run build` (production build to dist/)
-- **Dev**: `pnpm run dev` (watch mode build)
-- **Test**: No tests configured (pnpm test errors out)
-- **Lint/Typecheck**: No linting or type checking scripts defined
+- **Build**: `pnpm run build` (uses `vite build` to emit `dist/`)
+- **Dev**: `pnpm run dev` (runs `vite build --watch`; we do not execute this)
+- **Test**: no test script exists—`pnpm test` fails, so do not add or rely on tests
+- **Lint/Typecheck**: no lint/typecheck scripts are defined
+- **Format**: no formatter is wired; follow the existing hand-formatted style
 
 ## Code Style
-- **Imports**: ES6 imports with proper file extensions (.js, .jsx, .ts, .tsx) and @/ path aliases (@/lib/utils → src/lib/utils)
-- **Naming**: camelCase for variables/functions, PascalCase for components/types
-- **Components**: Arrow functions with prop destructuring
-- **Types**: TypeScript interfaces in PascalCase
-- **Styling**: Tailwind CSS utility classes
-- **File Extensions**: .jsx for React components, .js for utilities, .ts for types
-- **Error Handling**: Centralized error formatting and filtering via errorHandling.ts utilities
-- **Formatting**: No formatter configured - follow existing patterns
+- Prefer ES module imports with explicit extensions (`.js`, `.jsx`, `.ts`, `.tsx`) and use the `@/` alias for anything under `src/`.
+- React components should be arrow functions that destructure props and include `"use client";` when they live in `src/components/**` or otherwise interact with the browser.
+- Keep styling in Tailwind utilities; use the shared `cn` helper (`src/lib/utils.ts` or the legacy `lib/utils.js`) whenever you need to compose classes.
+- TypeScript definitions live in `src/types/index.ts`—new types should follow PascalCase for interfaces/aliases and camelCase for functions/variables.
+- Prefer `useStorage`/`useOpenCodeChat` for cross-cutting state instead of ad‑hoc global variables; those hooks already centralize persistence and streaming behavior.
+- Keep comments tight—explain non-obvious decisions but avoid noise such as “assign value to variable.”
 
 ## Architecture
 
-### Core Components
-- **`App.jsx`**: Main application with chat management, UI state, and advanced message rendering for tool calls and reasoning
-- **`AppSidebar.tsx`**: Custom sidebar component for chat navigation and management
-- **`chatStorage.js`**: Chrome storage utilities for persistence
-- **`errorHandling.ts`**: Centralized error formatting, filtering, and handling utilities
-- **`lib/utils.ts`**: Utility functions for className merging with clsx and tailwind-merge
+### Entry points
+- `src/sidepanel.html` loads the Vite bundle and pulls in KaTeX CSS for math support.
+- `src/main.jsx` just renders `<App />` and imports `index.css`.
+- `src/background.js` configures the Chrome side panel (`setPanelBehavior`), so updates there affect the extension window even though it barely changes.
 
-### Key Technologies
-- **React 19.2**: Modern React with hooks for state management
-- **Vercel AI SDK 5**: Latest AI SDK for streaming responses, tool calling, and multi-step conversations with `readUIMessageStream` for incremental UI updates
-- **Vercel AI Elements**: Professional UI components for AI chat interfaces (Branch, Message, PromptInput, Conversation, Response, Tool, Reasoning) with built-in streaming support
-- **Streamdown**: Unified Markdown and LaTeX rendering for rich text content
-- **Image Support**: Handles both URL-based images (file parts) and binary images (image parts) in chat messages with responsive display
-- **Chrome Storage API**: Persistent storage for chats and settings with separate keys for metadata and messages
-- **Tailwind CSS**: Utility-first CSS framework with custom theme variables
-- **Vite**: Fast build tool and development server for the browser extension
+### App shell & state
+- `src/App.jsx` is the control center: it loads chats/metadata via `chatStorage.js`, keeps `chatsData`/`currentChatId`/`chat` state, and wires `useStorage` for `apiKey`, `selectedModelId`, and the current theme.
+- The header pairs a `SidebarTrigger`, a “new chat” button (uses `AppSidebar`/`Sidebar` from `components/ui`), and a settings menu that surfaces the `ThemeSwitcher` and a “Clear All Chats” action.
+- Conversations render with `Branch`, `BranchMessages`, `Message`, and `MessageContent` (all from `src/components/ai-elements`). `renderMessageParts` (inside `App.jsx`) is responsible for chain-of-thought, tool-call, text, and image rendering.
+- A persistent footer holds `PromptInput` plus attachments, a model selector built from `MODELS` (`src/utils/constants.js`), and `PromptInputSubmit` (which uses `chat.status` to show “stop”/“retry” states).
+- `chat` (returned by `useOpenCodeChat`) exposes `messages`, `status`, `error`, and helpers like `sendMessage`, `stop`, `reload`, `clearError`, and `resetChatState`.
+- Theme preference uses `useStorage('theme')` plus `ThemeProvider` (see below) and writes CSS custom properties on `document.documentElement` for real‑time switching.
+- `clearSettings` wipes both `chrome.storage.sync` and `.local` and resets `apiKey`, `selectedModel`, `theme`, and `chatsData`.
 
-### Theme System
-- **Theme Definitions**: 23 themes with comprehensive color schemes for backgrounds, text, borders, syntax highlighting, markdown, and diffs. Each theme is maintained in its own file under `src/utils/themes/` (e.g., `zenburn.js`, `dracula.js`) for better organization and maintainability
-- **Main Export**: `src/utils/themes.js` imports all individual theme files and exports them as a `THEMES` object
-- **Color Mapping**: `THEME_VARIABLES` in `src/utils/themes.js` maps theme color keys to CSS custom properties used by Tailwind classes (--primary → accent colors for buttons, --card → backgroundElement for cards, --popover → backgroundElement, --muted → backgroundPanel, --input → backgroundElement, etc.)
-- **State Management**: `ThemeProvider` in `src/contexts/ThemeProvider.jsx` manages theme state with persistence via `useStorage` hook
-- **Dynamic Styling**: CSS variables applied to `document.documentElement` for real-time theme switching
-- **Theme Switcher**: Dropdown component in `src/components/settings/ThemeSwitcher.jsx` allows theme selection with current theme highlighted
-- **Integration**: `App.jsx` wraps app with `ThemeProvider` and includes `ThemeSwitcher` in header
-- **Persistence**: Theme choice saved to Chrome storage and restored on load; supports light/dark modes per theme
+### Theme system
+- Each theme lives in `src/utils/themes/{name}.js` (zenburn, vesper, dracula, night-owl, tokyoNight, synthwave84, solarized, rosePine, palenight, opencode, one-dark, nord, cobalt2, catppuccin, ayu, monokai, gruvbox, github, kanagawa, everforest, mellow, aura, material). `src/utils/themes.js` imports them, exports `THEMES`/`THEME_VARIABLES`, and sets `DEFAULT_THEME = 'zenburn'`.
+- `ThemeProvider.jsx` (in `src/contexts`) reads the saved theme/dark mode via `useStorage`, writes all mapped CSS custom properties to `:root`, and toggles the `light`/`dark` classes so Tailwind’s referent tokens stay in sync.
+- `ThemeSwitcher.jsx` (under `src/components/settings`) enumerates `THEMES` inside a `DropdownMenu`, highlights the active theme, and calls `changeTheme`.
+- The App’s header settings menu renders `ThemeSwitcher` plus “Clear All Chats,” so these theme controls stay in one place.
 
-### Multi-Chat Architecture
-Chats are stored as objects keyed by chat ID in `chatsData` state, each containing:
-- `metadata`: Chat info (id, title, timestamps, message count, last message)
-- `messages`: Array of message objects with role, parts (text, tool-call, tool-result, reasoning), and status
-- `status`: Current chat state ('ready', 'submitted', 'streaming', 'error')
+### Multi-chat persistence
+- `src/utils/chatStorage.js` exposes `getChatsList`, `createChat`, `loadChatMessages`, `saveChatMessages`, `deleteChat`, `getCurrentChatId`, and `setCurrentChatId`. Metadata and messages are stored separately using `chrome.storage.local`.
+- Chat metadata includes `id`, `title`, `createdAt`, `updatedAt`, `messageCount`, and `lastMessage`. Titles default to the first user message (capped around 30 characters) unless manually overridden.
+- `saveChatMessages` updates the metadata list when `updateMetadata` is `true`, so the sidebar can show the latest timestamp/title without extra requests.
+- `createChat` uses `generateId()` (from the `ai` package) and initializes an empty message list; `loadChatMessages` and `deleteChat` touch the same `CHAT_PREFIX + chatId` key.
+- App loading logic: on mount, read the chat list + `opencode_current_chat` from storage, hydrate `chatsData`, reset any lingering `streaming`/`submitted` statuses to `ready`, and set `currentChatId`. Switching chats loads messages on demand (if they haven’t been cached yet) and focuses the input.
 
-### Message Parts System
+### Hooks & AI services
+- `src/hooks/useOpenCodeChat.js` is the streaming hook at the heart of the experience. It uses `streamText` (from the `ai` package) with `convertToModelMessages`, `getProvider(selectedModel.id, selectedModel.type, apiKey)`, and tools from `src/services/ai/tools.js`. It maintains `messages`, `status`, `error`, and an `AbortController`.
+  * User messages are assembled from the submitted text and attachments, with attachments turned into `{ type: 'file', mediaType, url }` parts.
+  * The assistant answer starts as an empty `parts: [{ type: 'text', text: '' }]` entry with `status: 'submitted'`, transitions to `streaming`, then is finalized to `ready`.
+  * The streaming loop handles `text-delta`, `tool-call`, `tool-result`, and `reasoning` chunks, building incremental `parts`, pushing chain-of-thought steps, and updating `chat.messages`. `saveChatMessages` persists the final array, and the returned chats list updates metadata in App state.
+  * Helpers such as `regenerateResponse`, `stop`, `clearError`, and `resetChatState` let the UI retry/stop streaming or drop to a clean state.
+- `src/hooks/useStorage.js` wraps `chrome.storage.sync` with `useState`/`useEffect` so settings are read lazily and expose a loading flag.
+- `src/hooks/use-mobile.ts` offers `useIsMobile`, which `src/components/ui/sidebar.tsx` consumes to switch between drawer and rail/sidebar layouts.
+- `src/services/ai/providers.js` creates an OpenAI-compatible provider pointing at `https://opencode.ai/zen/v1`; `services/ai/client.js` re-exports `getProvider` and `getTools` for future use.
+- `src/services/ai/tools.js` defines `webFetchTool`, `analyzeCodeTool`, and `getDocumentationTool` via the `tool` helper + `zod` schemas; `webFetchTool` truncates responses to ~2KB and returns metadata such as status, headers, and timestamps.
 
-Messages use a `parts` array for rich content. Each part has a `type` and content:
+### Message parts & rendering
+- Messages are arrays of `parts` with types like `text`, `file`, `image`, `tool-call`, `tool-result`, and `reasoning`.
+- `convertPartsToChainOfThought` inside `App.jsx` converts tool progress + reasoning into a synthetic `chain-of-thought` part so the UI can collapse/expand the steps.
+- `renderMessageParts` handles:
+  * Chain-of-thought sections (`ChainOfThought`, `ChainOfThoughtStep`, `ChainOfThoughtSearchResults`, `ChainOfThoughtImage`).
+  * Tool errors (`tool-*` parts where `state === 'output-error'`) rendered as destructive cards.
+  * Text (`part.type === 'text'`): wraps `Response` (Streamdown) and also scans the text for image URLs via `IMAGE_URL_REGEX`, showing each inline link as an `<img>` block (restoring the previous “link preview” behavior, including GIFs).
+  * File parts whose `mediaType` starts with `image/` (renders the `part.url` as an `<img>`).
+  * Binary image parts (type `image`) converted to `data:` URLs before rendering.
+  * Unknown part types fallback to a JSON dump for debugging, so you can inspect new part shapes without crashing the loop.
+- Streaming states render a “Generating…” pulse whenever a message’s status is `streaming`.
 
-- **`text`**: Markdown/LaTeX content rendered via `Response` component
-- **`file`**: File references with URL and mediaType, displayed as images when mediaType starts with 'image/'
-- **`image`**: Binary image data converted to data URLs for display
-- **`tool-call`**: Tool invocation with `toolName`, `args`, and `toolCallId` for correlation
-- **`tool-result`**: Tool execution result with `result`, `error`, and matching `toolCallId`
-- **`reasoning`**: AI's internal thinking, displayed in collapsible `Reasoning` component
+### Data flow summary
+1. The user types or drops files in `PromptInput`. Attachments become `file` parts.
+2. `handleSend` (in `App.jsx`) ensures there is a current chat, that the API key/model are set, and that the hook is in `ready` state before calling `chat.sendMessage`.
+3. `useOpenCodeChat` adds a placeholder assistant message, marks the overall chat as `streaming`, and pumps `streamText.fullStream`.
+4. Chunks update the current assistant message’s `parts` array; the hook saves incremental messages to `chatsData`, calls `saveChatMessages()`, and updates metadata via the returned chats list.
+5. When streaming ends, the message status flips to `ready`, `currentChatStatus` becomes `ready`, and the prompt input allows new submissions. If an error occurs, `status` becomes `error`, and `chat.error` drives the retry/dismiss/reset UI row.
+6. Attachments and tool outputs stay in the message history; switching chats loads their saved messages from `chrome.storage`.
 
-Parts stream incrementally during generation, enabling real-time UI updates.
+### Error handling
+- `src/utils/errorHandling.ts` contains:
+  * `formatAIError()`—human-friendly labels for `AI_APICallError`, `AI_NoOutputGeneratedError`, etc.
+  * `createErrorForUI()`—wraps errors into UI-friendly objects (used by `createUnhandledRejectionHandler()`).
+  * `filterMessagesForAPI()`—helper to drop error-laden messages from future requests (not wired into `useOpenCodeChat` yet but handy for future filtering work).
+  * `createUnhandledRejectionHandler()`—registered in `App.jsx` to catch stray `AI_*` rejections, attach a `tool-error` part to the last assistant message, and prevent the raw error from bubbling to the console twice.
+- The UI displays errors in a banner with Retry/Dismiss/Reset buttons wired to `chat.reload()`, `chat.clearError()`, and `chat.resetChatState()`.
 
-Messages are loaded on-demand when switching chats. Streaming responses update the specific chat's messages in real-time with incremental part updates. Persistence uses Chrome local storage with separate keys for metadata and messages.
-
-**Note**: Images can now be attached by users and are sent to AI models. Image display supports both URL-based images (file parts) and binary images (image parts) in chat messages. User attachments are included in message history and sent to models that support them.
-
-### Data Flow
-1. **User Input** → `PromptInput` → `handleSend` in `App.jsx` (includes text and file attachments)
-2. **Message Filtering** → `filterMessagesForAPI()` excludes error messages from conversation history sent to API
-3. **AI Processing** → Direct API calls to OpenCode Zen endpoints via Vercel AI SDK 5 with tool calling enabled
-4. **Real-time Streaming** → `consumeUIMessageStream()` yields incremental `UIMessage` objects with updated parts (text, tool-call, tool-result, reasoning, file, image)
-5. **UI Updates** → `renderMessageParts()` function handles complex message structures with specialized rendering for each part type
-6. **Error Handling** → `createErrorForUI()` formats errors for display, `createUnhandledRejectionHandler()` manages uncaught errors
-7. **Tool Execution** → AI invokes tools during generation; results are streamed back and correlated via `toolCallId`
-8. **Reasoning Display** → Internal AI reasoning steps are captured in reasoning parts and displayed via collapsible `Reasoning` components
-9. **Image Display** → File parts with image mediaType and image parts with binary data are rendered as images in the chat
-10. **Attachment Processing** → User-uploaded images are converted to file parts and included in messages sent to AI models
-11. **Persistence** → Auto-saves to Chrome storage on message changes (metadata + messages with all part types)
-12. **Chat Management** → CRUD operations via `chatStorage.js` utilities with on-demand message loading
-13. **Rich Rendering** → Streamdown processes Markdown and LaTeX in AI responses via AI Elements components, with specialized rendering for tool calls/results, reasoning, and images
-
-### Advanced Message Rendering
-The `renderMessageParts` function in `App.jsx` handles complex message structures with multiple content types:
-- **Text Content**: Standard markdown and LaTeX rendering via `Response` component
-- **Image Content**: File parts with image mediaType display as `<img>` elements with responsive sizing and lazy loading; binary image parts are converted to data URLs for display
-- **Tool Calls**: Interactive display showing function name, arguments, and execution state
-- **Tool Results**: Combined input/output display with error handling for failed tool executions
-- **Reasoning Steps**: Collapsible sections showing AI's internal thought process
-- **Error Display**: Red error cards for failed operations using `createErrorForUI()` formatting
-- **Streaming States**: Real-time updates during generation with appropriate loading indicators
-- **Graceful Degradation**: Debug information for unknown part types
-
-### Error Handling Architecture
-
-The error handling system is designed to provide robust error management while maintaining clean API communication:
-
-- **`formatAIError()`**: Formats AI SDK errors into user-friendly messages based on error types (APICallError, NoOutputGeneratedError, etc.)
-- **`createErrorForUI()`**: Creates standardized error objects for UI display with consistent structure
-- **`filterMessagesForAPI()`**: Filters out error messages from conversation history sent to the API to prevent 422 rejections
-- **`createUnhandledRejectionHandler()`**: Manages uncaught promise rejections and displays them in the UI
-
-**Error Flow**:
-1. **Streaming Errors** → Caught by `onError` callback → Yielded as error parts → Thrown in stream loop → Formatted and displayed
-2. **Setup Errors** → Caught in outer try/catch → Formatted and displayed
-3. **Unhandled Errors** → Caught by global handler → Added to last AI message
-4. **API Filtering** → Error messages excluded from conversation history sent to models
-
-### Project Structure (High-Level Overview)
+## Project structure (high-level)
 ```
+AGENTS.md
+package.json
+pnpm-lock.yaml
+manifest.json
+README.md
+dist/                 # build output (don't regenerate it here)
 lib/
-├── utils.js               # Additional utility functions
+├── utils.js          # shared `cn` helper for non-ESM contexts
+node_modules/         # dependencies
+scripts/              # auxiliary scripts (not usually edited)
 src/
+├── App.jsx
+├── background.js
+├── main.jsx
+├── sidepanel.html
+├── index.css
 ├── components/
-│   ├── ai-elements/       # Custom AI Elements UI components (Branch, Message, PromptInput, Response, Tool, Reasoning, etc.)
-│   ├── settings/          # Settings components (ModelSelector, ThemeSwitcher)
-│   ├── ui/                # shadcn UI components
-│   └── app-sidebar.tsx    # Custom sidebar component for chat navigation and management
+│   ├── ai-elements/   # custom AI Elements (Response, PromptInput, Conversation, ChainOfThought, etc.)
+│   ├── app-sidebar.tsx
+│   ├── settings/       # ThemeSwitcher.jsx, ModelSelector.jsx
+│   └── ui/             # shadcn-based building blocks (button, sidebar, tooltip, etc.)
+├── contexts/
+│   └── ThemeProvider.jsx
 ├── hooks/
-│   ├── use-mobile.ts      # Mobile detection hook
-│   └── useStorage.js      # Chrome storage hook
-├── lib/
-│   └── utils.ts           # Utility functions for className merging
+│   ├── useOpenCodeChat.js
+│   ├── useStorage.js
+│   └── use-mobile.ts
 ├── services/
 │   └── ai/
-│       ├── client.js      # AI SDK integration
-│       ├── providers.js   # Model provider setup
-│       └── tools.js       # AI tools configuration
-├── types/
-│   └── index.ts           # TypeScript type definitions
+│       ├── client.js
+│       ├── providers.js
+│       └── tools.js
 ├── utils/
-│   ├── chatStorage.js     # Chat persistence utilities
-│   ├── constants.js       # App constants
-│   └── errorHandling.ts   # Centralized error formatting and filtering utilities
-├── App.jsx                # Main application
-├── background.js          # Extension background service worker
-├── index.css              # Global styles
-└── main.jsx               # Application entry point
+│   ├── chatStorage.js
+│   ├── constants.js
+│   ├── errorHandling.ts
+│   └── themes/
+│       ├── (23 theme definition files, e.g., zenburn.js, dracula.js, opencode.js, etc.)
+│       └── themes.js
+├── lib/
+│   └── utils.ts        # Tailwind `cn` helper for the React app
+├── types/
+│   └── index.ts
 ```
+
+Whenever something in this stack changes (new tools, new storage keys, etc.), update this file so it stays accurate. Double-check sections you touch to keep the guidance aligned with the codebase.
