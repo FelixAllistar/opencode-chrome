@@ -21,6 +21,8 @@ export function useOpenCodeChat({
   const abortControllerRef = useRef(null);
   const statusRef = useRef(status);
 
+  const currentChatData = chatsData[currentChatId];
+
   // Update messages when current chat changes
   const chatsDataRef = useRef();
   chatsDataRef.current = chatsData;
@@ -32,9 +34,15 @@ export function useOpenCodeChat({
 
   // Sync messages with current chat (only when chatId changes, not on every chatsData change)
   useEffect(() => {
-    setMessages(chatsData[currentChatId]?.messages || []);
-    setStatus(chatsData[currentChatId]?.status || 'ready');
-  }, [currentChatId]);
+    if (!currentChatData) {
+      setMessages([]);
+      setStatus('ready');
+      return;
+    }
+
+    setMessages(currentChatData.messages || []);
+    setStatus(currentChatData.status || 'ready');
+  }, [currentChatId, currentChatData]);
 
   // Simple network connectivity test
   const testConnectivity = useCallback(async () => {
