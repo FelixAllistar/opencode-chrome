@@ -22,10 +22,16 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 ### Entry points
 - `src/sidepanel.html` loads the Vite bundle and pulls in KaTeX CSS for math support.
 - `src/main.jsx` just renders `<App />` and imports `index.css`.
-- `src/background.js` configures the Chrome side panel (`setPanelBehavior`), so updates there affect the extension window even though it barely changes.
+- `src/background.js` configures the Chrome side panel (`setPanelBehavior`), wires the selection-only context menu, and routes highlighted text to the panel so the service worker affects the sidebar even when the UI is not open.
+
+### Context menu integration
+- The manifest now needs `contextMenus` in addition to `sidePanel/storage/activeTab` so Chrome allows adding a “Open in OpenSidebar” entry whenever the user selects text.
+- The background service worker registers that menu, handles the click synchronously (opening the side panel with the provided `tabId`), and keeps a small `pendingSelections` queue plus runtime messaging for the panel to consume once it finishes loading.
+- When the menu fires, the handler opens the panel immediately (no async work to preserve the user gesture) and enqueues the highlighted text; the panel then polls for any pending payloads via `chrome.runtime.sendMessage({ type: 'openSidebar_getPendingSelections' })`.
 
 ### App shell & state
 - `src/App.jsx` is the control center: it loads chats/metadata via `chatStorage.js`, keeps `chatsData`/`currentChatId`/`chat` state, and wires `useStorage` for the OpenCode Zen API key (`apiKey`), the optional Google Gemini API key (`googleApiKey`), `selectedModelId`, and the current theme.
+- The same file now also listens for runtime messages from the background (and pulls any queued selections on load) so context-menu highlights auto-create a chat, write into `PromptInput`, and submit just as if the user typed them directly.
 - The header pairs a `SidebarTrigger`, a “new chat” button (uses `AppSidebar`/`Sidebar` from `components/ui`), and a `SettingsMenu` (in `src/components/settings/SettingsMenu.jsx`) that surfaces the `ThemeSwitcher`, the OpenCode/Gemini API key inputs, and a “Clear All Chats” action.
 - Conversations render with `Branch`, `BranchMessages`, `Message`, and `MessageContent` (all from `src/components/ai-elements`). `renderMessageParts` (inside `App.jsx`) is responsible for chain-of-thought, tool-call, text, and image rendering.
 - A persistent footer holds `PromptInput` plus attachments, a model selector built from `MODELS` (`src/utils/constants.js` – each entry now ships an `isVision` flag so we can skip image parts for non-vision models, and `big-pickle`/`grok-code` are the current non-vision entries), and `PromptInputSubmit` (which uses `chat.status` to show “stop”/“retry” states). `MODELS` now also includes the Google Gemini entries (Gemini 1.5 Flash, Gemini 1.5 Pro, Gemini 2.5 Pro) flagged as `type: 'google'`.
