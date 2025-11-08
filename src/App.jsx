@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Settings, BrainIcon, SearchIcon } from 'lucide-react';
+import { Plus, BrainIcon, SearchIcon } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
 
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
-import { ThemeSwitcher } from './components/settings/ThemeSwitcher.jsx';
 
 import { useOpenCodeChat } from './hooks/useOpenCodeChat.js';
 import {
@@ -59,6 +58,7 @@ import {
   ChainOfThoughtImage,
 } from './components/ai-elements/chain-of-thought.tsx';
 import { THEMES, THEME_VARIABLES } from './utils/themes.js';
+import { SettingsMenu } from './components/settings/SettingsMenu.jsx';
 import {
   PromptInput,
   PromptInputBody,
@@ -111,7 +111,9 @@ export default function App() {
   const [chatsData, setChatsData] = useState({});
   const [currentChatId, setCurrentChatIdState] = useState(null);
   const [keyInput, setKeyInput] = useState('');
+  const [googleKeyInput, setGoogleKeyInput] = useState('');
   const [apiKey, setApiKey, isApiKeyLoading] = useStorage('apiKey', '');
+  const [googleApiKey, setGoogleApiKey, isGoogleApiKeyLoading] = useStorage('googleApiKey', '');
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
@@ -120,7 +122,6 @@ export default function App() {
   const [theme, setTheme] = useStorage('theme', 'zenburn');
   const [isDark, setIsDark] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const inputRef = useRef(null);
 
   // Handle unhandled promise rejections at the app level
@@ -137,6 +138,14 @@ export default function App() {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
   }, [currentChatId, chatsData, setChatsData]);
+
+  useEffect(() => {
+    setKeyInput(apiKey);
+  }, [apiKey]);
+
+  useEffect(() => {
+    setGoogleKeyInput(googleApiKey);
+  }, [googleApiKey]);
 
 
 
@@ -175,6 +184,7 @@ export default function App() {
     chatsData,
     setChatsData,
     apiKey,
+    googleApiKey,
     selectedModel,
     onError: (errorForUI) => {
       console.error('Chat error in useOpenCodeChat:', errorForUI);
@@ -190,18 +200,6 @@ export default function App() {
   const currentChatStatus = chat.status;
 
 
-
-  // Close settings dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (settingsOpen && !event.target.closest('.relative')) {
-        setSettingsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [settingsOpen]);
 
   // Load chats and current chat on mount
   useEffect(() => {
@@ -333,7 +331,13 @@ export default function App() {
 
   const saveSettings = () => {
     setApiKey(keyInput);
+    setGoogleApiKey(googleKeyInput);
     setSelectedModelId(selectedModel.id);
+  };
+
+  const handleSaveKeys = (newApiKey, newGoogleApiKey) => {
+    setApiKey(newApiKey);
+    setGoogleApiKey(newGoogleApiKey);
   };
 
   const handleSend = async (message, event) => {
@@ -344,9 +348,10 @@ export default function App() {
 
     const hasText = Boolean(message.text);
     const hasAttachments = Boolean(message.files?.length);
+    const requiredKey = selectedModel?.type === 'google' ? googleApiKey : apiKey;
 
     // Follow AI SDK pattern: disable input during error states
-    if (!apiKey || !(hasText || hasAttachments) || chat.status === 'error') {
+    if (!requiredKey || !(hasText || hasAttachments) || chat.status === 'error') {
       // Don't clear error automatically - let user explicitly dismiss or retry
       return;
     }
@@ -376,6 +381,9 @@ export default function App() {
     chrome.storage.sync.clear();
     chrome.storage.local.clear();
     setApiKey('');
+    setGoogleApiKey('');
+    setKeyInput('');
+    setGoogleKeyInput('');
     setSelectedModelId(MODELS[0].id);
     setChatsData({});
     setCurrentChatIdState(null);
@@ -662,7 +670,7 @@ export default function App() {
     chat.stop();
   };
 
-  if (isApiKeyLoading || isModelLoading || isInitialDataLoading) {
+  if (isApiKeyLoading || isGoogleApiKeyLoading || isModelLoading || isInitialDataLoading) {
     return (
       <div className="flex h-screen bg-background items-center justify-center">
       </div>
@@ -679,6 +687,16 @@ export default function App() {
           onChange={e => setKeyInput(e.target.value)}
           className="border p-2 mb-4"
           placeholder="API Key"
+          type="password"
+        />
+        <p className="mb-2 text-sm text-muted-foreground">
+          Optional: add a Google Gemini API key to unlock Gemini models.
+        </p>
+        <input
+          value={googleKeyInput}
+          onChange={e => setGoogleKeyInput(e.target.value)}
+          className="border p-2 mb-4"
+          placeholder="Gemini API Key (optional)"
           type="password"
         />
         <button onClick={saveSettings} className="bg-blue-500 text-white px-4 py-2 rounded">
@@ -723,36 +741,13 @@ export default function App() {
                   </Breadcrumb>
               </div>
               <div className="flex items-center space-x-2">
-                  <div className="relative">
-                     <Button
-                       variant="ghost"
-                       size="default"
-                       onClick={() => setSettingsOpen(!settingsOpen)}
-                       className="h-12 w-12 p-0"
-                     >
-                       <Settings className="h-8 w-8" />
-                     </Button>
-                    {settingsOpen && (
-                      <div className="absolute right-0 top-full mt-1 w-48 bg-popover border rounded-md shadow-lg z-50">
-                        <div className="p-2 space-y-1">
-                          <div className="px-2 py-1 text-sm font-medium">Settings</div>
-                          <div className="border-t pt-1">
-                            <div className="px-2 py-1 text-xs text-muted-foreground">Theme</div>
-                            <div className="p-2">
-                              <ThemeSwitcher />
-                            </div>
-                          </div>
-                          <button
-                            onClick={clearSettings}
-                            className="w-full text-left px-2 py-1 text-sm hover:bg-accent rounded"
-                          >
-                            Clear All Chats
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <SettingsMenu
+                  apiKey={apiKey}
+                  googleApiKey={googleApiKey}
+                  onSaveKeys={handleSaveKeys}
+                  onClear={clearSettings}
+                />
+              </div>
             </div>
           </header>
             <div className="flex-1 flex flex-col overflow-hidden">

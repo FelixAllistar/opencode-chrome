@@ -10,5 +10,9 @@ export const MODELS = [
   { id: 'grok-code', name: 'Grok Code Fast 1', type: 'openai-compatible', isVision: false },
   { id: 'kimi-k2', name: 'Kimi K2', type: 'openai-compatible', isVision: true },
   { id: 'big-pickle', name: 'Big Pickle', type: 'openai-compatible', isVision: false },
-  { id: 'error-test', name: 'Error Test Model', type: 'openai-compatible', isVision: true }
+  { id: 'error-test', name: 'Error Test Model', type: 'openai-compatible', isVision: true },
+  { id: 'gemini-2.5-flash-image', name: 'Nano Banana', type: 'google', isVision: true },
+  { id: 'gemini-flash-latest', name: 'Flash', type: 'google', isVision: true },
+  { id: 'gemini-flash-lite-latest', name: 'Flash Lite', type: 'google', isVision: true },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', type: 'google', isVision: true }
 ];

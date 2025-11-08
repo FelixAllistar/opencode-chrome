@@ -25,13 +25,13 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 - `src/background.js` configures the Chrome side panel (`setPanelBehavior`), so updates there affect the extension window even though it barely changes.
 
 ### App shell & state
-- `src/App.jsx` is the control center: it loads chats/metadata via `chatStorage.js`, keeps `chatsData`/`currentChatId`/`chat` state, and wires `useStorage` for `apiKey`, `selectedModelId`, and the current theme.
-- The header pairs a `SidebarTrigger`, a “new chat” button (uses `AppSidebar`/`Sidebar` from `components/ui`), and a settings menu that surfaces the `ThemeSwitcher` and a “Clear All Chats” action.
+- `src/App.jsx` is the control center: it loads chats/metadata via `chatStorage.js`, keeps `chatsData`/`currentChatId`/`chat` state, and wires `useStorage` for the OpenCode Zen API key (`apiKey`), the optional Google Gemini API key (`googleApiKey`), `selectedModelId`, and the current theme.
+- The header pairs a `SidebarTrigger`, a “new chat” button (uses `AppSidebar`/`Sidebar` from `components/ui`), and a `SettingsMenu` (in `src/components/settings/SettingsMenu.jsx`) that surfaces the `ThemeSwitcher`, the OpenCode/Gemini API key inputs, and a “Clear All Chats” action.
 - Conversations render with `Branch`, `BranchMessages`, `Message`, and `MessageContent` (all from `src/components/ai-elements`). `renderMessageParts` (inside `App.jsx`) is responsible for chain-of-thought, tool-call, text, and image rendering.
-- A persistent footer holds `PromptInput` plus attachments, a model selector built from `MODELS` (`src/utils/constants.js` – each entry now ships an `isVision` flag so we can skip image parts for non-vision models, and `big-pickle`/`grok-code` are the current non-vision entries), and `PromptInputSubmit` (which uses `chat.status` to show “stop”/“retry” states).
+- A persistent footer holds `PromptInput` plus attachments, a model selector built from `MODELS` (`src/utils/constants.js` – each entry now ships an `isVision` flag so we can skip image parts for non-vision models, and `big-pickle`/`grok-code` are the current non-vision entries), and `PromptInputSubmit` (which uses `chat.status` to show “stop”/“retry” states). `MODELS` now also includes the Google Gemini entries (Gemini 1.5 Flash, Gemini 1.5 Pro, Gemini 2.5 Pro) flagged as `type: 'google'`.
 - `chat` (returned by `useOpenCodeChat`) exposes `messages`, `status`, `error`, and helpers like `sendMessage`, `stop`, `reload`, `clearError`, and `resetChatState`.
 - Theme preference uses `useStorage('theme')` plus `ThemeProvider` (see below) and writes CSS custom properties on `document.documentElement` for real‑time switching.
-- `clearSettings` wipes both `chrome.storage.sync` and `.local` and resets `apiKey`, `selectedModel`, `theme`, and `chatsData`.
+- `clearSettings` wipes both `chrome.storage.sync` and `.local` and resets `apiKey`, `googleApiKey`, `selectedModel`, `theme`, and `chatsData`.
 
 ### Theme system
 - Each theme lives in `src/utils/themes/{name}.js` (zenburn, vesper, dracula, night-owl, tokyoNight, synthwave84, solarized, rosePine, palenight, opencode, one-dark, nord, cobalt2, catppuccin, ayu, monokai, gruvbox, github, kanagawa, everforest, mellow, aura, material). `src/utils/themes.js` imports them, exports `THEMES`/`THEME_VARIABLES`, and sets `DEFAULT_THEME = 'zenburn'`.
@@ -47,7 +47,7 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 - App loading logic: on mount, read the chat list + `opencode_current_chat` from storage, hydrate `chatsData`, reset any lingering `streaming`/`submitted` statuses to `ready`, and set `currentChatId`. Switching chats loads messages on demand (if they haven’t been cached yet) and focuses the input.
 
 ### Hooks & AI services
-- `src/hooks/useOpenCodeChat.js` is the streaming hook at the heart of the experience. It uses `streamText` (from the `ai` package) with `convertToModelMessages`, `getProvider(selectedModel.id, selectedModel.type, apiKey)`, and tools from `src/services/ai/tools.js`. It maintains `messages`, `status`, `error`, and an `AbortController`.
+- `src/hooks/useOpenCodeChat.js` is the streaming hook at the heart of the experience. It uses `streamText` (from the `ai` package) with `convertToModelMessages`, `getProvider(selectedModel.id, selectedModel.type, { openCode: apiKey, google: googleApiKey })`, and tools from `src/services/ai/tools.js`. It maintains `messages`, `status`, `error`, and an `AbortController`.
   * User messages are assembled from the submitted text and attachments, with attachments turned into `{ type: 'file', mediaType, url }` parts.
   * The assistant answer starts as an empty `parts: [{ type: 'text', text: '' }]` entry with `status: 'submitted'`, transitions to `streaming`, then is finalized to `ready`.
   * The streaming loop handles `text-delta`, `tool-call`, `tool-result`, and `reasoning` chunks, building incremental `parts`, pushing chain-of-thought steps, and updating `chat.messages`. `saveChatMessages` persists the final array, and the returned chats list updates metadata in App state.
@@ -56,7 +56,7 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 - When `selectedModel.isVision === false`, the hook filters every `file/image` part out of the context before calling `convertToModelMessages`, so rendered images stay visible to humans but never reach models that can’t handle vision. The hook now also sanitizes every message part before `convertToModelMessages` is invoked: reasoning segments and tool metadata become plain `text` entries, tool inputs/results are summarized in truncated text descriptions, and vision-only data is dropped for non-vision models. This keeps Grok Code Fast and any other stricter `openai-compatible` models from rejecting the payload even though the UI still retains the richer tool chunks for rendering.
 - `src/hooks/useStorage.js` wraps `chrome.storage.sync` with `useState`/`useEffect` so settings are read lazily and expose a loading flag.
 - `src/hooks/use-mobile.ts` offers `useIsMobile`, which `src/components/ui/sidebar.tsx` consumes to switch between drawer and rail/sidebar layouts.
-- `src/services/ai/providers.js` creates an OpenAI-compatible provider pointing at `https://opencode.ai/zen/v1`; `services/ai/client.js` re-exports `getProvider` and `getTools` for future use.
+- `src/services/ai/providers.js` now routes `type: 'google'` models through `createGoogleGenerativeAI` (using the Gemini API key) while continuing to serve the OpenCode Zen-compatible provider for the other model types; `services/ai/client.js` re-exports `getProvider` and `getTools` for future use.
 - `src/services/ai/tools.js` defines `webFetchTool`, `analyzeCodeTool`, and `getDocumentationTool` via the `tool` helper + `zod` schemas; `webFetchTool` truncates responses to ~2KB and returns metadata such as status, headers, and timestamps.
 
 ### Message parts & rendering

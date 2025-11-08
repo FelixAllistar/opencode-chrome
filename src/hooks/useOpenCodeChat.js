@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { streamText, convertToModelMessages, stepCountIs } from 'ai';
 import { getProvider } from '../services/ai/providers.js';
 import { getTools } from '../services/ai/tools.js';
@@ -103,6 +103,7 @@ export function useOpenCodeChat({
   chatsData,
   setChatsData,
   apiKey,
+  googleApiKey,
   selectedModel,
   onError
 }) {
@@ -115,6 +116,16 @@ export function useOpenCodeChat({
   const currentChatData = chatsData[currentChatId];
   const isVisionModel = Boolean(selectedModel?.isVision ?? true);
   const tools = getTools();
+
+  const requiredApiKey = useMemo(
+    () => (selectedModel?.type === 'google' ? googleApiKey : apiKey),
+    [selectedModel?.type, googleApiKey, apiKey]
+  );
+
+  const providerApiKeys = useMemo(
+    () => ({ openCode: apiKey, google: googleApiKey }),
+    [apiKey, googleApiKey]
+  );
 
   const prepareMessagesForModel = useCallback(
     (messages) => {
@@ -168,8 +179,8 @@ export function useOpenCodeChat({
   
   // Helper function to check if we can send messages
   const canSendMessage = useCallback(() => {
-    return status === 'ready' && !error && apiKey && currentChatId;
-  }, [status, error, apiKey, currentChatId]);
+    return status === 'ready' && !error && requiredApiKey && currentChatId;
+  }, [status, error, requiredApiKey, currentChatId]);
 
   // Reset chat state for severe error cases
   const resetChatState = useCallback(() => {
@@ -208,7 +219,7 @@ export function useOpenCodeChat({
     }
 
     // Check if we can regenerate messages
-    if (!apiKey || !currentChatId) return;
+    if (!requiredApiKey || !currentChatId) return;
 
     // Create AbortController for this regeneration
     abortControllerRef.current = new AbortController();
@@ -255,7 +266,7 @@ export function useOpenCodeChat({
       const modelContext = prepareMessagesForModel(contextMessages);
 
       const result = await streamText({
-        model: getProvider(selectedModel.id, selectedModel.type, apiKey),
+        model: getProvider(selectedModel.id, selectedModel.type, providerApiKeys),
         messages: convertToModelMessages(modelContext, { tools }),
         tools,
         system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
@@ -504,7 +515,7 @@ export function useOpenCodeChat({
     } finally {
       abortControllerRef.current = null;
     }
-  }, [currentChatId, setChatsData, selectedModel, apiKey, onError, testConnectivity]);
+  }, [currentChatId, setChatsData, selectedModel, requiredApiKey, providerApiKeys, onError, testConnectivity]);
 
   // Custom sendMessage that integrates with your chat system
   const sendMessage = useCallback(async (message) => {
@@ -526,7 +537,7 @@ export function useOpenCodeChat({
     }
 
     // Check if we can send messages (more robust for retry scenarios)
-    if (!apiKey || !currentChatId) return;
+    if (!requiredApiKey || !currentChatId) return;
 
     // If status is not ready, try to clear error and check again
     if (statusRef.current !== 'ready') {
@@ -620,7 +631,7 @@ export function useOpenCodeChat({
       const messagesForModel = prepareMessagesForModel(allMessages);
 
       const result = await streamText({
-        model: getProvider(selectedModel.id, selectedModel.type, apiKey),
+        model: getProvider(selectedModel.id, selectedModel.type, providerApiKeys),
         messages: convertToModelMessages(messagesForModel, { tools }),
         tools,
         system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
@@ -906,7 +917,7 @@ export function useOpenCodeChat({
     } finally {
       abortControllerRef.current = null;
     }
-  }, [currentChatId, messages, apiKey, selectedModel, chatsData, setChatsData, onError, testConnectivity]);
+  }, [currentChatId, messages, requiredApiKey, providerApiKeys, selectedModel, chatsData, setChatsData, onError, testConnectivity]);
 
   // Stop generation
   const stop = useCallback(() => {
