@@ -1,12 +1,12 @@
 
-import { analyzeCodeToolDefinition } from './analyzeCodeTool';
+
 import { getDocumentationToolDefinition } from './getDocumentationTool';
 import { webFetchToolDefinition } from './webFetchTool';
 import type { ToolDefinition } from './types';
 
 export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   webFetchToolDefinition,
-  analyzeCodeToolDefinition,
+
   getDocumentationToolDefinition,
 ];
 
