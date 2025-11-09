@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, BrainIcon, SearchIcon } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
-import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index.js';
+import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index';
 
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
 

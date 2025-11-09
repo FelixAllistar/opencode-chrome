@@ -3,4 +3,4 @@
 // Main streaming logic has been moved to useOpenCodeChat hook
 
 export { getProvider } from './providers.js';
-export { getTools } from './tools/index.js';
+export { getTools } from './tools/index';

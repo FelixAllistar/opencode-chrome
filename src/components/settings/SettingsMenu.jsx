@@ -5,7 +5,7 @@ import { Settings as SettingsIcon } from 'lucide-react';
 import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import { Button } from '../ui/button.jsx';
 import { Switch } from '../ui/switch.tsx';
-import { TOOL_DEFINITIONS } from '../../services/ai/tools/index.js';
+import { TOOL_DEFINITIONS } from '../../services/ai/tools/index';
 
 export const SettingsMenu = ({
   apiKey = '',

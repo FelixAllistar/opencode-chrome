@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { streamText, convertToModelMessages, stepCountIs } from 'ai';
 import { getProvider } from '../services/ai/providers.js';
-import { getTools } from '../services/ai/tools/index.js';
+import { getTools } from '../services/ai/tools/index';
 import { saveChatMessages } from '../utils/chatStorage.js';
 
 const MAX_TOOL_PART_TEXT_LENGTH = 900;
