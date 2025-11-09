@@ -4,12 +4,16 @@ import { useState, useEffect, useRef } from 'react';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import { Button } from '../ui/button.jsx';
+import { Switch } from '../ui/switch.tsx';
+import { TOOL_DEFINITIONS } from '../../services/ai/tools/index.js';
 
 export const SettingsMenu = ({
   apiKey = '',
   googleApiKey = '',
+  enabledTools = [],
   onSaveKeys,
-  onClear
+  onClear,
+  onToggleTool
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [localApiKey, setLocalApiKey] = useState(apiKey);
@@ -89,6 +93,26 @@ export const SettingsMenu = ({
               <Button variant="secondary" size="default" className="w-full text-xs" onClick={handleSave}>
                 Save Keys
               </Button>
+            </div>
+            <div className="border-t pt-2 space-y-2">
+              <div className="px-2 py-1 text-xs text-muted-foreground">Tools</div>
+              <div className="space-y-2 px-2">
+                {TOOL_DEFINITIONS.map((definition) => {
+                  const isChecked = enabledTools.includes(definition.id);
+                  return (
+                    <div key={definition.id} className="flex items-center justify-between">
+                      <div className="pr-2">
+                        <p className="text-sm font-medium">{definition.label}</p>
+                        <p className="text-[10px] text-muted-foreground">{definition.description}</p>
+                      </div>
+                      <Switch
+                        checked={isChecked}
+                        onCheckedChange={(value) => onToggleTool?.(definition.id, Boolean(value))}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <button
               type="button"

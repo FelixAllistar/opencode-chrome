@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { streamText, convertToModelMessages, stepCountIs } from 'ai';
 import { getProvider } from '../services/ai/providers.js';
-import { getTools } from '../services/ai/tools.js';
+import { getTools } from '../services/ai/tools/index.js';
 import { saveChatMessages } from '../utils/chatStorage.js';
 
 const MAX_TOOL_PART_TEXT_LENGTH = 900;
@@ -105,6 +105,7 @@ export function useOpenCodeChat({
   apiKey,
   googleApiKey,
   selectedModel,
+  enabledToolIds,
   onError
 }) {
   const [status, setStatus] = useState('ready');
@@ -115,7 +116,7 @@ export function useOpenCodeChat({
 
   const currentChatData = chatsData[currentChatId];
   const isVisionModel = Boolean(selectedModel?.isVision ?? true);
-  const tools = getTools();
+  const tools = getTools(enabledToolIds);
 
   const requiredApiKey = useMemo(
     () => (selectedModel?.type === 'google' ? googleApiKey : apiKey),

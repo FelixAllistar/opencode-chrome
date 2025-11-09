@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, BrainIcon, SearchIcon } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
+import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index.js';
 
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
 
@@ -116,6 +117,7 @@ export default function App() {
   const [googleApiKey, setGoogleApiKey, isGoogleApiKeyLoading] = useStorage('googleApiKey', '');
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
+  const [enabledToolIds, setEnabledToolIds] = useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS);
   const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
 
   // Load theme immediately for loading screen
@@ -176,6 +178,24 @@ export default function App() {
     applyTheme(theme, isDark);
   }, [theme, isDark]);
 
+  const handleToggleTool = useCallback((toolId, enable) => {
+    setEnabledToolIds((previous) => {
+      const normalizedSet = new Set(
+        Array.isArray(previous) ? previous : DEFAULT_ENABLED_TOOL_IDS
+      );
+
+      if (enable) {
+        normalizedSet.add(toolId);
+      } else {
+        normalizedSet.delete(toolId);
+      }
+
+      return TOOL_DEFINITIONS.filter((definition) =>
+        normalizedSet.has(definition.id)
+      ).map((definition) => definition.id);
+    });
+  }, [setEnabledToolIds]);
+
   // Ref to hold the latest chatsData to solve stale state in async callbacks
   const chatsDataRef = useRef();
   chatsDataRef.current = chatsData;
@@ -188,6 +208,7 @@ export default function App() {
     apiKey,
     googleApiKey,
     selectedModel,
+    enabledToolIds,
     onError: (errorForUI) => {
       console.error('Chat error in useOpenCodeChat:', errorForUI);
       // You can add additional error handling here if needed
@@ -824,6 +845,8 @@ export default function App() {
                   googleApiKey={googleApiKey}
                   onSaveKeys={handleSaveKeys}
                   onClear={clearSettings}
+                  enabledTools={enabledToolIds ?? DEFAULT_ENABLED_TOOL_IDS}
+                  onToggleTool={handleToggleTool}
                 />
               </div>
             </div>
