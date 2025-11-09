@@ -3,10 +3,10 @@
 NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for producing artifacts. Respect that even though Vite is configured, builds/watch mode are off-limits during your work.
 
 ## Commands
-- **Build**: `pnpm run build` (uses `vite build` to emit `dist/`)
+- **Build**: `pnpm run build` (uses `pnpm run typecheck && vite build` so the tools registry is validated before bundling)
 - **Dev**: `pnpm run dev` (runs `vite build --watch`; we do not execute this)
 - **Test**: no test script exists—`pnpm test` fails, so do not add or rely on tests
-- **Lint/Typecheck**: no lint/typecheck scripts are defined
+- **Typecheck**: `pnpm run typecheck` (runs `tsc --noEmit` scoped to `src/services/ai/tools/**/*.ts` so missing tool imports fail fast)
 - **Format**: no formatter is wired; follow the existing hand-formatted style
 
 ## Code Style
@@ -63,7 +63,7 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 - `src/hooks/useStorage.js` wraps `chrome.storage.sync` with `useState`/`useEffect` so settings are read lazily and expose a loading flag.
 - `src/hooks/use-mobile.ts` offers `useIsMobile`, which `src/components/ui/sidebar.tsx` consumes to switch between drawer and rail/sidebar layouts.
 - `src/services/ai/providers.js` now routes `type: 'google'` models through `createGoogleGenerativeAI` (using the Gemini API key) while continuing to serve the OpenCode Zen-compatible provider for the other model types; `services/ai/client.js` re-exports `getProvider` and `getTools` for future use.
-- `src/services/ai/tools.js` defines `webFetchTool`, `analyzeCodeTool`, and `getDocumentationTool` via the `tool` helper + `zod` schemas; `webFetchTool` truncates responses to ~2KB and returns metadata such as status, headers, and timestamps.
+- Tools now live under `src/services/ai/tools/`—`types.ts` defines `ToolDefinition` metadata (`id`, `label`, `description`, `defaultEnabled`, `tool`) and each helper (`webFetchTool.ts`, `analyzeCodeTool.ts`, `getDocumentationTool.ts`) exports a concrete `tool({ … })` instance plus its metadata. `index.ts` imports those definitions, exposes `TOOL_DEFINITIONS`, `DEFAULT_ENABLED_TOOL_IDS`, `tools`, `getTools(enabledToolIds)`, and `getToolDefinition()`, and `tsconfig.json` scopes `tsc --noEmit` to that directory so removing an import fails at compile time. `App.jsx` persists `enabledTools` via `useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS)`, passes that list into `useOpenCodeChat`, and the hook calls `getTools(enabledToolIds)` before `streamText` so the SDK only sees whichever tools are enabled. `SettingsMenu.jsx` renders a `Switch` per tool definition (using the shared `Switch` component) and writes toggles back to `enabledTools`, giving the user a persistent on/off control for each tool.
 
 ### Message parts & rendering
 - Messages are arrays of `parts` with types like `text`, `file`, `image`, `tool-call`, `tool-result`, and `reasoning`.
@@ -126,7 +126,12 @@ src/
 │   └── ai/
 │       ├── client.js
 │       ├── providers.js
-│       └── tools.js
+│       └── tools/
+│           ├── analyzeCodeTool.ts
+│           ├── getDocumentationTool.ts
+│           ├── index.ts
+│           ├── types.ts
+│           └── webFetchTool.ts
 ├── utils/
 │   ├── chatStorage.js
 │   ├── constants.js
