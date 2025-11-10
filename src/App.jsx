@@ -3,6 +3,7 @@ import { Plus, BrainIcon, SearchIcon } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
 import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index';
+import { setBraveSearchSubscriptionToken } from './services/ai/tools/braveSearchTool';
 
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
 
@@ -113,8 +114,10 @@ export default function App() {
   const [currentChatId, setCurrentChatIdState] = useState(null);
   const [keyInput, setKeyInput] = useState('');
   const [googleKeyInput, setGoogleKeyInput] = useState('');
+  const [braveKeyInput, setBraveKeyInput] = useState('');
   const [apiKey, setApiKey, isApiKeyLoading] = useStorage('apiKey', '');
   const [googleApiKey, setGoogleApiKey, isGoogleApiKeyLoading] = useStorage('googleApiKey', '');
+  const [braveSearchApiKey, setBraveSearchApiKey, isBraveSearchApiKeyLoading] = useStorage('braveSearchApiKey', '');
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [enabledToolIds, setEnabledToolIds] = useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS);
@@ -150,6 +153,14 @@ export default function App() {
   useEffect(() => {
     setGoogleKeyInput(googleApiKey);
   }, [googleApiKey]);
+
+  useEffect(() => {
+    setBraveKeyInput(braveSearchApiKey);
+  }, [braveSearchApiKey]);
+
+  useEffect(() => {
+    setBraveSearchSubscriptionToken(braveSearchApiKey);
+  }, [braveSearchApiKey]);
 
 
 
@@ -368,12 +379,14 @@ export default function App() {
   const saveSettings = () => {
     setApiKey(keyInput);
     setGoogleApiKey(googleKeyInput);
+    setBraveSearchApiKey(braveKeyInput);
     setSelectedModelId(selectedModel.id);
   };
 
-  const handleSaveKeys = (newApiKey, newGoogleApiKey) => {
+  const handleSaveKeys = (newApiKey, newGoogleApiKey, newBraveSearchApiKey) => {
     setApiKey(newApiKey);
     setGoogleApiKey(newGoogleApiKey);
+    setBraveSearchApiKey(newBraveSearchApiKey);
   };
 
   const handleSend = useCallback(async (message, event) => {
@@ -476,17 +489,19 @@ export default function App() {
     }
   };
 
-  const clearSettings = () => {
-    chrome.storage.sync.clear();
-    chrome.storage.local.clear();
-    setApiKey('');
-    setGoogleApiKey('');
-    setKeyInput('');
-    setGoogleKeyInput('');
-    setSelectedModelId(MODELS[0].id);
-    setChatsData({});
-    setCurrentChatIdState(null);
-  };
+const clearSettings = () => {
+  chrome.storage.sync.clear();
+  chrome.storage.local.clear();
+  setApiKey('');
+  setGoogleApiKey('');
+  setBraveSearchApiKey('');
+  setKeyInput('');
+  setGoogleKeyInput('');
+  setBraveKeyInput('');
+  setSelectedModelId(MODELS[0].id);
+  setChatsData({});
+  setCurrentChatIdState(null);
+};
 
   // Convert AI SDK 5.0 parts to chain-of-thought format
   const convertPartsToChainOfThought = (parts) => {
@@ -769,7 +784,13 @@ export default function App() {
     chat.stop();
   };
 
-  if (isApiKeyLoading || isGoogleApiKeyLoading || isModelLoading || isInitialDataLoading) {
+  if (
+    isApiKeyLoading ||
+    isGoogleApiKeyLoading ||
+    isBraveSearchApiKeyLoading ||
+    isModelLoading ||
+    isInitialDataLoading
+  ) {
     return (
       <div className="flex h-screen bg-background items-center justify-center">
       </div>
@@ -796,6 +817,16 @@ export default function App() {
           onChange={e => setGoogleKeyInput(e.target.value)}
           className="border p-2 mb-4"
           placeholder="Gemini API Key (optional)"
+          type="password"
+        />
+        <p className="mb-2 text-sm text-muted-foreground">
+          Optional: add a Brave Search API key to enable the Brave Search tool.
+        </p>
+        <input
+          value={braveKeyInput}
+          onChange={e => setBraveKeyInput(e.target.value)}
+          className="border p-2 mb-4"
+          placeholder="Brave Search API Key (optional)"
           type="password"
         />
         <button onClick={saveSettings} className="bg-blue-500 text-white px-4 py-2 rounded">
@@ -843,6 +874,7 @@ export default function App() {
                 <SettingsMenu
                   apiKey={apiKey}
                   googleApiKey={googleApiKey}
+                  braveSearchApiKey={braveSearchApiKey}
                   onSaveKeys={handleSaveKeys}
                   onClear={clearSettings}
                   enabledTools={enabledToolIds ?? DEFAULT_ENABLED_TOOL_IDS}

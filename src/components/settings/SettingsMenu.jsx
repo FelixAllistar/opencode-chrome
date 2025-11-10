@@ -10,6 +10,7 @@ import { TOOL_DEFINITIONS } from '../../services/ai/tools/index';
 export const SettingsMenu = ({
   apiKey = '',
   googleApiKey = '',
+  braveSearchApiKey = '',
   enabledTools = [],
   onSaveKeys,
   onClear,
@@ -18,6 +19,7 @@ export const SettingsMenu = ({
   const [isOpen, setIsOpen] = useState(false);
   const [localApiKey, setLocalApiKey] = useState(apiKey);
   const [localGoogleApiKey, setLocalGoogleApiKey] = useState(googleApiKey);
+  const [localBraveSearchApiKey, setLocalBraveSearchApiKey] = useState(braveSearchApiKey);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -27,6 +29,10 @@ export const SettingsMenu = ({
   useEffect(() => {
     setLocalGoogleApiKey(googleApiKey);
   }, [googleApiKey]);
+
+  useEffect(() => {
+    setLocalBraveSearchApiKey(braveSearchApiKey);
+  }, [braveSearchApiKey]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -41,7 +47,7 @@ export const SettingsMenu = ({
 
   const handleSave = () => {
     if (onSaveKeys) {
-      onSaveKeys(localApiKey, localGoogleApiKey);
+      onSaveKeys(localApiKey, localGoogleApiKey, localBraveSearchApiKey);
     }
   };
 
@@ -49,6 +55,7 @@ export const SettingsMenu = ({
     if (onClear) {
       onClear();
     }
+    setLocalBraveSearchApiKey('');
     setIsOpen(false);
   };
 
@@ -89,6 +96,15 @@ export const SettingsMenu = ({
                 className="w-full border px-2 py-1 rounded text-xs"
                 value={localGoogleApiKey}
                 onChange={(event) => setLocalGoogleApiKey(event.target.value)}
+              />
+              <label className="text-xs text-muted-foreground">
+                Brave Search API Key <span className="text-[10px] text-muted-foreground">optional</span>
+              </label>
+              <input
+                type="password"
+                className="w-full border px-2 py-1 rounded text-xs"
+                value={localBraveSearchApiKey}
+                onChange={(event) => setLocalBraveSearchApiKey(event.target.value)}
               />
               <Button variant="secondary" size="default" className="w-full text-xs" onClick={handleSave}>
                 Save Keys
