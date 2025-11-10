@@ -1,4 +1,5 @@
-const CONTEXT_MENU_ID = 'openSidebarSelection';
+const CONTEXT_MENU_OPEN_ID = 'openSidebarSelectionOpen';
+const CONTEXT_MENU_ATTACH_ID = 'openSidebarSelectionAttach';
 
 // Keep a simple queue in case the panel is opened after the context menu click.
 const pendingSelections = [];
@@ -9,8 +10,13 @@ const createContextMenu = () => {
   }
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
-      id: CONTEXT_MENU_ID,
-      title: 'Open in OpenSidebar',
+      id: CONTEXT_MENU_OPEN_ID,
+      title: 'OpenSidebar - Open in New Chat',
+      contexts: ['selection'],
+    });
+    chrome.contextMenus.create({
+      id: CONTEXT_MENU_ATTACH_ID,
+      title: 'OpenSidebar - Attach As Context',
       contexts: ['selection'],
     });
   });
@@ -19,7 +25,10 @@ const createContextMenu = () => {
 const sendSelectionToPanel = (selection) => {
   chrome.runtime.sendMessage(
     {
-      type: 'openSidebar_contextSelection',
+      type:
+        selection.type === 'attach'
+          ? 'openSidebar_contextAttachment'
+          : 'openSidebar_contextSelection',
       payload: selection,
     },
     () => {
@@ -46,7 +55,10 @@ chrome.runtime.onStartup?.addListener(() => {
 });
 
 chrome.contextMenus?.onClicked.addListener((info, tab) => {
-  if (info.menuItemId !== CONTEXT_MENU_ID) {
+  if (
+    info.menuItemId !== CONTEXT_MENU_OPEN_ID &&
+    info.menuItemId !== CONTEXT_MENU_ATTACH_ID
+  ) {
     return;
   }
 
@@ -58,6 +70,8 @@ chrome.contextMenus?.onClicked.addListener((info, tab) => {
   const selection = {
     text,
     tabId: typeof info.tabId === 'number' ? info.tabId : null,
+    type:
+      info.menuItemId === CONTEXT_MENU_ATTACH_ID ? 'attach' : 'open',
   };
 
   const tabId =

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, BrainIcon, SearchIcon } from 'lucide-react';
+import { Plus, BrainIcon, SearchIcon, X } from 'lucide-react';
+import { nanoid } from 'nanoid';
 import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
 import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index';
@@ -125,6 +126,7 @@ export default function App() {
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [enabledToolIds, setEnabledToolIds] = useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS);
   const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
+  const [attachedContextSnippets, setAttachedContextSnippets] = useState([]);
 
   // Load theme immediately for loading screen
   const [theme, setTheme] = useStorage('theme', 'zenburn');
@@ -325,6 +327,7 @@ export default function App() {
     }));
 
     setCurrentChatIdState(newChatMetadata.id);
+    setAttachedContextSnippets([]);
     await setCurrentChatId(newChatMetadata.id);
 
     // Focus the input after creating new chat
@@ -335,11 +338,12 @@ export default function App() {
     }, 0);
 
     return newChatMetadata.id;
-  }, [setChatsData, setCurrentChatIdState, setCurrentChatId]);
+  }, [setAttachedContextSnippets, setChatsData, setCurrentChatIdState, setCurrentChatId]);
 
   const switchChat = async (chatId) => {
     if (chatId === currentChatId) return;
 
+    setAttachedContextSnippets([]);
     setCurrentChatIdState(chatId);
     await setCurrentChatId(chatId);
 
@@ -409,12 +413,24 @@ export default function App() {
       chatId = await createNewChat();
     }
 
-    const hasText = Boolean(message.text);
+    const contexts = attachedContextSnippets
+      .map((entry) => entry.text?.trim())
+      .filter(Boolean);
+    const userText = (message.text ?? '').trim();
+    const contextBlock = contexts.length
+      ? `Attached context:` +
+        `\n${contexts.join('\n\n')}`
+      : '';
+    const combinedText = [contextBlock, userText]
+      .filter(Boolean)
+      .join('\n\n');
+    const hasText = combinedText.trim().length > 0;
     const hasAttachments = Boolean(message.files?.length);
+    const hasContext = contexts.length > 0;
     const requiredKey = selectedModel?.type === 'google' ? googleApiKey : apiKey;
 
     // Follow AI SDK pattern: disable input during error states
-    if (!requiredKey || !(hasText || hasAttachments) || currentChat.status === 'error') {
+    if (!requiredKey || !(hasText || hasAttachments || hasContext) || currentChat.status === 'error') {
       // Don't clear error automatically - let user explicitly dismiss or retry
       return;
     }
@@ -424,14 +440,20 @@ export default function App() {
       return;
     }
 
+    const payload = {
+      ...message,
+      text: combinedText,
+    };
+
     try {
       // Use our chat hook to send the message
-      await currentChat.sendMessage(message);
+      await currentChat.sendMessage(payload);
+      setAttachedContextSnippets([]);
     } catch (error) {
       console.error('Error sending message:', error);
       // Error handling is managed by the useOpenCodeChat hook
     }
-  }, [apiKey, createNewChat, currentChatId, googleApiKey, selectedModel]);
+  }, [apiKey, attachedContextSnippets, createNewChat, currentChatId, googleApiKey, selectedModel]);
 
   const handleExternalSelection = useCallback(async (rawText) => {
     const text = rawText?.trim();
@@ -455,6 +477,33 @@ export default function App() {
     }
   }, [createNewChat, handleSend]);
 
+  const handleAttachContext = useCallback(async (rawText) => {
+    const text = rawText?.trim();
+    if (!text) {
+      return;
+    }
+
+    if (!currentChatIdRef.current) {
+      await createNewChat();
+    }
+
+    setAttachedContextSnippets((prev) => [
+      ...prev,
+      {
+        id: nanoid(),
+        text,
+      },
+    ]);
+
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [createNewChat]);
+
+  const removeContextSnippet = useCallback((id) => {
+    setAttachedContextSnippets((prev) => prev.filter((snippet) => snippet.id !== id));
+  }, []);
+
   useEffect(() => {
     if (typeof chrome === 'undefined' || !chrome.runtime) {
       return;
@@ -463,6 +512,9 @@ export default function App() {
     const handleRuntimeMessage = (message) => {
       if (message?.type === 'openSidebar_contextSelection') {
         void handleExternalSelection(message.payload?.text);
+      }
+      if (message?.type === 'openSidebar_contextAttachment') {
+        void handleAttachContext(message.payload?.text);
       }
     };
 
@@ -480,7 +532,12 @@ export default function App() {
           if (Array.isArray(selections) && selections.length > 0) {
             (async () => {
               for (const selection of selections) {
-                if (selection?.text) {
+                if (!selection?.text) {
+                  continue;
+                }
+                if (selection.type === 'attach') {
+                  await handleAttachContext(selection.text);
+                } else {
                   await handleExternalSelection(selection.text);
                 }
               }
@@ -493,7 +550,7 @@ export default function App() {
     return () => {
       chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
     };
-  }, [handleExternalSelection]);
+  }, [handleAttachContext, handleExternalSelection]);
 
   const changeModel = (modelId) => {
     const model = MODELS.find(m => m.id === modelId);
@@ -979,11 +1036,37 @@ const clearSettings = () => {
                  </div>
                )}
 
-                {/* Prompt input - fixed at bottom */}
+               {/* Prompt input - fixed at bottom */}
                 <div className="border-t bg-background p-4">
                    <PromptInput onSubmit={handleSend} accept="image/*" multiple globalDrop>
                      <PromptInputBody>
-                       <PromptInputAttachments>
+                        {attachedContextSnippets.length > 0 && (
+                          <div className="mb-2 flex flex-wrap gap-2">
+                            {attachedContextSnippets.map((snippet) => {
+                              const displayText =
+                                snippet.text.length > 120
+                                  ? `${snippet.text.slice(0, 120)}…`
+                                  : snippet.text;
+                              return (
+                                <div
+                                  key={snippet.id}
+                                  className="flex items-center gap-1 rounded-full border border-border bg-muted/30 px-3 py-1 text-xs text-foreground"
+                                >
+                                  <span className="max-w-[240px] truncate">{displayText}</span>
+                                  <button
+                                    type="button"
+                                    className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                    aria-label="Remove attached context"
+                                    onClick={() => removeContextSnippet(snippet.id)}
+                                  >
+                                    <X className="size-3" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <PromptInputAttachments>
                          {(attachment) => (
                            <PromptInputAttachment data={attachment} />
                          )}
