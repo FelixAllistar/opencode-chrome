@@ -1,11 +1,29 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import { Button } from '../ui/button.jsx';
 import { Switch } from '../ui/switch.tsx';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+} from '../ui/form.tsx';
 import { TOOL_DEFINITIONS } from '../../services/ai/tools/index';
+
+const settingsSchema = z.object({
+  openCodeApiKey: z.string(),
+  googleApiKey: z.string(),
+  braveSearchApiKey: z.string(),
+  context7ApiKey: z.string(),
+});
 
 export const SettingsMenu = ({
   apiKey = '',
@@ -18,27 +36,28 @@ export const SettingsMenu = ({
   onToggleTool
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [localApiKey, setLocalApiKey] = useState(apiKey);
-  const [localGoogleApiKey, setLocalGoogleApiKey] = useState(googleApiKey);
-  const [localBraveSearchApiKey, setLocalBraveSearchApiKey] = useState(braveSearchApiKey);
-  const [localContext7ApiKey, setLocalContext7ApiKey] = useState(context7ApiKey);
+  const [isSaved, setIsSaved] = useState(false);
+  const savedTimerRef = useRef(null);
   const menuRef = useRef(null);
 
-  useEffect(() => {
-    setLocalApiKey(apiKey);
-  }, [apiKey]);
+  const form = useForm({
+    resolver: zodResolver(settingsSchema),
+    defaultValues: {
+      openCodeApiKey: apiKey,
+      googleApiKey,
+      braveSearchApiKey,
+      context7ApiKey
+    }
+  });
 
   useEffect(() => {
-    setLocalGoogleApiKey(googleApiKey);
-  }, [googleApiKey]);
-
-  useEffect(() => {
-    setLocalBraveSearchApiKey(braveSearchApiKey);
-  }, [braveSearchApiKey]);
-
-  useEffect(() => {
-    setLocalContext7ApiKey(context7ApiKey);
-  }, [context7ApiKey]);
+    form.reset({
+      openCodeApiKey: apiKey,
+      googleApiKey,
+      braveSearchApiKey,
+      context7ApiKey
+    });
+  }, [apiKey, googleApiKey, braveSearchApiKey, context7ApiKey, form]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -51,19 +70,39 @@ export const SettingsMenu = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSave = () => {
-    if (onSaveKeys) {
-      onSaveKeys(localApiKey, localGoogleApiKey, localBraveSearchApiKey, localContext7ApiKey);
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) {
+        clearTimeout(savedTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleSave = (values) => {
+    onSaveKeys?.(
+      values.openCodeApiKey,
+      values.googleApiKey,
+      values.braveSearchApiKey,
+      values.context7ApiKey
+    );
+
+    setIsSaved(true);
+    if (savedTimerRef.current) {
+      clearTimeout(savedTimerRef.current);
     }
+    savedTimerRef.current = setTimeout(() => setIsSaved(false), 2000);
   };
 
   const handleClear = () => {
-    if (onClear) {
-      onClear();
-    }
-    setLocalBraveSearchApiKey('');
-    setLocalContext7ApiKey('');
+    onClear?.();
+    form.reset({
+      openCodeApiKey: '',
+      googleApiKey: '',
+      braveSearchApiKey: '',
+      context7ApiKey: ''
+    });
     setIsOpen(false);
+    setIsSaved(false);
   };
 
   return (
@@ -87,45 +126,89 @@ export const SettingsMenu = ({
                 <ThemeSwitcher />
               </div>
             </div>
-            <div className="border-t pt-2 space-y-2">
-              <label className="text-xs text-muted-foreground">OpenCode Zen API Key</label>
-              <input
-                type="password"
-                className="w-full border px-2 py-1 rounded text-xs"
-                value={localApiKey}
-                onChange={(event) => setLocalApiKey(event.target.value)}
-              />
-              <label className="text-xs text-muted-foreground">
-                Gemini API Key <span className="text-[10px] text-muted-foreground">optional</span>
-              </label>
-              <input
-                type="password"
-                className="w-full border px-2 py-1 rounded text-xs"
-                value={localGoogleApiKey}
-                onChange={(event) => setLocalGoogleApiKey(event.target.value)}
-              />
-              <label className="text-xs text-muted-foreground">
-                Brave Search API Key <span className="text-[10px] text-muted-foreground">optional</span>
-              </label>
-              <input
-                type="password"
-                className="w-full border px-2 py-1 rounded text-xs"
-                value={localBraveSearchApiKey}
-                onChange={(event) => setLocalBraveSearchApiKey(event.target.value)}
-              />
-              <label className="text-xs text-muted-foreground">
-                Context7 API Key <span className="text-[10px] text-muted-foreground">optional</span>
-              </label>
-              <input
-                type="password"
-                className="w-full border px-2 py-1 rounded text-xs"
-                value={localContext7ApiKey}
-                onChange={(event) => setLocalContext7ApiKey(event.target.value)}
-              />
-              <Button variant="secondary" size="default" className="w-full text-xs" onClick={handleSave}>
-                Save Keys
-              </Button>
-            </div>
+            <Form {...form}>
+              <form className="border-t pt-2 space-y-2" onSubmit={form.handleSubmit(handleSave)}>
+                <FormField
+                  control={form.control}
+                  name="openCodeApiKey"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs text-muted-foreground">OpenCode Zen API Key</FormLabel>
+                      <FormControl>
+                        <input
+                          {...field}
+                          type="password"
+                          className="w-full border px-2 py-1 rounded text-xs"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="googleApiKey"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Gemini API Key
+                      </FormLabel>
+                      <FormDescription className="text-[10px]">optional</FormDescription>
+                      <FormControl>
+                        <input
+                          {...field}
+                          type="password"
+                          className="w-full border px-2 py-1 rounded text-xs"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="braveSearchApiKey"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Brave Search API Key
+                      </FormLabel>
+                      <FormDescription className="text-[10px]">optional</FormDescription>
+                      <FormControl>
+                        <input
+                          {...field}
+                          type="password"
+                          className="w-full border px-2 py-1 rounded text-xs"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="context7ApiKey"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Context7 API Key
+                      </FormLabel>
+                      <FormDescription className="text-[10px]">optional</FormDescription>
+                      <FormControl>
+                        <input
+                          {...field}
+                          type="password"
+                          className="w-full border px-2 py-1 rounded text-xs"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <div
+                  aria-live="polite"
+                  className="text-[10px] text-muted-foreground"
+                >
+                  {isSaved ? 'Keys saved' : 'Press Enter to save'}
+                </div>
+              </form>
+            </Form>
             <div className="border-t pt-2 space-y-2">
               <div className="px-2 py-1 text-xs text-muted-foreground">Tools</div>
               <div className="space-y-2 px-2">
