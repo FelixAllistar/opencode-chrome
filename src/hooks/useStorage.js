@@ -13,9 +13,16 @@ export const useStorage = (key, defaultValue) => {
     });
   }, [key]);
 
-  const setStoredValue = (newValue) => {
-    setValue(newValue);
-    chrome.storage.sync.set({ [key]: newValue });
+  const setStoredValue = (newValueOrUpdater) => {
+    setValue((previousValue) => {
+      const resolvedValue =
+        typeof newValueOrUpdater === 'function'
+          ? newValueOrUpdater(previousValue)
+          : newValueOrUpdater;
+
+      chrome.storage.sync.set({ [key]: resolvedValue });
+      return resolvedValue;
+    });
   };
 
   return [value, setStoredValue, isLoading];
