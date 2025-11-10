@@ -37,6 +37,8 @@ export const SettingsMenu = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [activeField, setActiveField] = useState('openCodeApiKey');
+  const [lastSavedField, setLastSavedField] = useState(null);
   const savedTimerRef = useRef(null);
   const menuRef = useRef(null);
 
@@ -87,10 +89,15 @@ export const SettingsMenu = ({
     );
 
     setIsSaved(true);
+    setLastSavedField(activeField);
+
     if (savedTimerRef.current) {
       clearTimeout(savedTimerRef.current);
     }
-    savedTimerRef.current = setTimeout(() => setIsSaved(false), 2000);
+    savedTimerRef.current = setTimeout(() => {
+      setIsSaved(false);
+      setLastSavedField(null);
+    }, 2000);
   };
 
   const handleClear = () => {
@@ -103,7 +110,14 @@ export const SettingsMenu = ({
     });
     setIsOpen(false);
     setIsSaved(false);
+    setLastSavedField(null);
   };
+
+  const inputBaseClass =
+    'w-full border px-2 py-1 rounded text-xs transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60';
+
+  const getInputClass = (fieldName) =>
+    `${inputBaseClass}${lastSavedField === fieldName ? ' ring-2 ring-primary/60 animate-pulse' : ''}`;
 
   return (
     <div ref={menuRef} className="relative">
@@ -127,18 +141,24 @@ export const SettingsMenu = ({
               </div>
             </div>
             <Form {...form}>
-              <form className="border-t pt-2 space-y-2" onSubmit={form.handleSubmit(handleSave)}>
+              <form
+                className="border-t pt-2 space-y-2"
+                onSubmit={form.handleSubmit(handleSave)}
+              >
                 <FormField
                   control={form.control}
                   name="openCodeApiKey"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">OpenCode Zen API Key</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        OpenCode Zen API Key
+                      </FormLabel>
                       <FormControl>
                         <input
                           {...field}
                           type="password"
-                          className="w-full border px-2 py-1 rounded text-xs"
+                          className={getInputClass('openCodeApiKey')}
+                          onFocus={() => setActiveField('openCodeApiKey')}
                         />
                       </FormControl>
                     </FormItem>
@@ -157,7 +177,8 @@ export const SettingsMenu = ({
                         <input
                           {...field}
                           type="password"
-                          className="w-full border px-2 py-1 rounded text-xs"
+                          className={getInputClass('googleApiKey')}
+                          onFocus={() => setActiveField('googleApiKey')}
                         />
                       </FormControl>
                     </FormItem>
@@ -176,7 +197,8 @@ export const SettingsMenu = ({
                         <input
                           {...field}
                           type="password"
-                          className="w-full border px-2 py-1 rounded text-xs"
+                          className={getInputClass('braveSearchApiKey')}
+                          onFocus={() => setActiveField('braveSearchApiKey')}
                         />
                       </FormControl>
                     </FormItem>
@@ -195,18 +217,17 @@ export const SettingsMenu = ({
                         <input
                           {...field}
                           type="password"
-                          className="w-full border px-2 py-1 rounded text-xs"
+                          className={getInputClass('context7ApiKey')}
+                          onFocus={() => setActiveField('context7ApiKey')}
                         />
                       </FormControl>
                     </FormItem>
                   )}
                 />
-                <div
-                  aria-live="polite"
-                  className="text-[10px] text-muted-foreground"
-                >
+                <div aria-live="polite" className="text-[10px] text-muted-foreground">
                   {isSaved ? 'Keys saved' : 'Press Enter to save'}
                 </div>
+                <button type="submit" className="sr-only" aria-label="Save API keys" />
               </form>
             </Form>
             <div className="border-t pt-2 space-y-2">
