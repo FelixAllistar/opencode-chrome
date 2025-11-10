@@ -11,6 +11,7 @@ export const SettingsMenu = ({
   apiKey = '',
   googleApiKey = '',
   braveSearchApiKey = '',
+  context7ApiKey = '',
   enabledTools = [],
   onSaveKeys,
   onClear,
@@ -20,6 +21,7 @@ export const SettingsMenu = ({
   const [localApiKey, setLocalApiKey] = useState(apiKey);
   const [localGoogleApiKey, setLocalGoogleApiKey] = useState(googleApiKey);
   const [localBraveSearchApiKey, setLocalBraveSearchApiKey] = useState(braveSearchApiKey);
+  const [localContext7ApiKey, setLocalContext7ApiKey] = useState(context7ApiKey);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -35,6 +37,10 @@ export const SettingsMenu = ({
   }, [braveSearchApiKey]);
 
   useEffect(() => {
+    setLocalContext7ApiKey(context7ApiKey);
+  }, [context7ApiKey]);
+
+  useEffect(() => {
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
         setIsOpen(false);
@@ -47,7 +53,7 @@ export const SettingsMenu = ({
 
   const handleSave = () => {
     if (onSaveKeys) {
-      onSaveKeys(localApiKey, localGoogleApiKey, localBraveSearchApiKey);
+      onSaveKeys(localApiKey, localGoogleApiKey, localBraveSearchApiKey, localContext7ApiKey);
     }
   };
 
@@ -56,6 +62,7 @@ export const SettingsMenu = ({
       onClear();
     }
     setLocalBraveSearchApiKey('');
+    setLocalContext7ApiKey('');
     setIsOpen(false);
   };
 
@@ -105,6 +112,15 @@ export const SettingsMenu = ({
                 className="w-full border px-2 py-1 rounded text-xs"
                 value={localBraveSearchApiKey}
                 onChange={(event) => setLocalBraveSearchApiKey(event.target.value)}
+              />
+              <label className="text-xs text-muted-foreground">
+                Context7 API Key <span className="text-[10px] text-muted-foreground">optional</span>
+              </label>
+              <input
+                type="password"
+                className="w-full border px-2 py-1 rounded text-xs"
+                value={localContext7ApiKey}
+                onChange={(event) => setLocalContext7ApiKey(event.target.value)}
               />
               <Button variant="secondary" size="default" className="w-full text-xs" onClick={handleSave}>
                 Save Keys

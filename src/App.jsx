@@ -4,6 +4,7 @@ import { useStorage } from './hooks/useStorage.js';
 import { MODELS } from './utils/constants.js';
 import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index';
 import { setBraveSearchSubscriptionToken } from './services/ai/tools/braveSearchTool';
+import { setContext7ApiKey as registerContext7ApiKey } from './services/ai/tools/context7Tool';
 
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
 
@@ -115,9 +116,11 @@ export default function App() {
   const [keyInput, setKeyInput] = useState('');
   const [googleKeyInput, setGoogleKeyInput] = useState('');
   const [braveKeyInput, setBraveKeyInput] = useState('');
+  const [context7KeyInput, setContext7KeyInput] = useState('');
   const [apiKey, setApiKey, isApiKeyLoading] = useStorage('apiKey', '');
   const [googleApiKey, setGoogleApiKey, isGoogleApiKeyLoading] = useStorage('googleApiKey', '');
   const [braveSearchApiKey, setBraveSearchApiKey, isBraveSearchApiKeyLoading] = useStorage('braveSearchApiKey', '');
+  const [context7ApiKey, setContext7ApiKeyStorage, isContext7ApiKeyLoading] = useStorage('context7ApiKey', '');
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [enabledToolIds, setEnabledToolIds] = useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS);
@@ -159,8 +162,16 @@ export default function App() {
   }, [braveSearchApiKey]);
 
   useEffect(() => {
+    setContext7KeyInput(context7ApiKey);
+  }, [context7ApiKey]);
+
+  useEffect(() => {
     setBraveSearchSubscriptionToken(braveSearchApiKey);
   }, [braveSearchApiKey]);
+
+  useEffect(() => {
+    registerContext7ApiKey(context7ApiKey);
+  }, [context7ApiKey]);
 
 
 
@@ -380,13 +391,15 @@ export default function App() {
     setApiKey(keyInput);
     setGoogleApiKey(googleKeyInput);
     setBraveSearchApiKey(braveKeyInput);
+    setContext7ApiKeyStorage(context7KeyInput);
     setSelectedModelId(selectedModel.id);
   };
 
-  const handleSaveKeys = (newApiKey, newGoogleApiKey, newBraveSearchApiKey) => {
+  const handleSaveKeys = (newApiKey, newGoogleApiKey, newBraveSearchApiKey, newContext7ApiKey) => {
     setApiKey(newApiKey);
     setGoogleApiKey(newGoogleApiKey);
     setBraveSearchApiKey(newBraveSearchApiKey);
+    setContext7ApiKeyStorage(newContext7ApiKey);
   };
 
   const handleSend = useCallback(async (message, event) => {
@@ -495,9 +508,11 @@ const clearSettings = () => {
   setApiKey('');
   setGoogleApiKey('');
   setBraveSearchApiKey('');
+  setContext7ApiKeyStorage('');
   setKeyInput('');
   setGoogleKeyInput('');
   setBraveKeyInput('');
+  setContext7KeyInput('');
   setSelectedModelId(MODELS[0].id);
   setChatsData({});
   setCurrentChatIdState(null);
@@ -788,6 +803,7 @@ const clearSettings = () => {
     isApiKeyLoading ||
     isGoogleApiKeyLoading ||
     isBraveSearchApiKeyLoading ||
+    isContext7ApiKeyLoading ||
     isModelLoading ||
     isInitialDataLoading
   ) {
@@ -827,6 +843,16 @@ const clearSettings = () => {
           onChange={e => setBraveKeyInput(e.target.value)}
           className="border p-2 mb-4"
           placeholder="Brave Search API Key (optional)"
+          type="password"
+        />
+        <p className="mb-2 text-sm text-muted-foreground">
+          Optional: add a Context7 API key to enable pulling contextual docs via Context7.
+        </p>
+        <input
+          value={context7KeyInput}
+          onChange={e => setContext7KeyInput(e.target.value)}
+          className="border p-2 mb-4"
+          placeholder="Context7 API Key (optional)"
           type="password"
         />
         <button onClick={saveSettings} className="bg-blue-500 text-white px-4 py-2 rounded">
@@ -875,6 +901,7 @@ const clearSettings = () => {
                   apiKey={apiKey}
                   googleApiKey={googleApiKey}
                   braveSearchApiKey={braveSearchApiKey}
+                  context7ApiKey={context7ApiKey}
                   onSaveKeys={handleSaveKeys}
                   onClear={clearSettings}
                   enabledTools={enabledToolIds ?? DEFAULT_ENABLED_TOOL_IDS}

@@ -1,12 +1,15 @@
 
 
 import { braveSearchToolDefinition } from './braveSearchTool';
+import { context7ToolDefinition } from './context7Tool';
 import { getDocumentationToolDefinition } from './getDocumentationTool';
 import { webFetchToolDefinition } from './webFetchTool';
 import type { ToolDefinition } from './types';
 
 export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   webFetchToolDefinition,
+
+  context7ToolDefinition,
 
   braveSearchToolDefinition,
 
