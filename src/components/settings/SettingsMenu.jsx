@@ -8,14 +8,7 @@ import { Settings as SettingsIcon } from 'lucide-react';
 import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import { Button } from '../ui/button.jsx';
 import { Switch } from '../ui/switch.tsx';
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-} from '../ui/form.tsx';
+import { ApiKeysSection } from './ApiKeysSection.jsx';
 import { TOOL_DEFINITIONS } from '../../services/ai/tools/index';
 
 const settingsSchema = z.object({
@@ -113,12 +106,6 @@ export const SettingsMenu = ({
     setLastSavedField(null);
   };
 
-  const inputBaseClass =
-    'w-full border px-2 py-1 rounded text-xs transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60';
-
-  const getInputClass = (fieldName) =>
-    `${inputBaseClass}${lastSavedField === fieldName ? ' ring-2 ring-primary/60 animate-pulse' : ''}`;
-
   return (
     <div ref={menuRef} className="relative">
       <Button
@@ -140,96 +127,13 @@ export const SettingsMenu = ({
                 <ThemeSwitcher />
               </div>
             </div>
-            <Form {...form}>
-              <form
-                className="border-t pt-2 space-y-2"
-                onSubmit={form.handleSubmit(handleSave)}
-              >
-                <FormField
-                  control={form.control}
-                  name="openCodeApiKey"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">
-                        OpenCode Zen API Key
-                      </FormLabel>
-                      <FormControl>
-                        <input
-                          {...field}
-                          type="password"
-                          className={getInputClass('openCodeApiKey')}
-                          onFocus={() => setActiveField('openCodeApiKey')}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="googleApiKey"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Gemini API Key
-                      </FormLabel>
-                      <FormDescription className="text-[10px]">optional</FormDescription>
-                      <FormControl>
-                        <input
-                          {...field}
-                          type="password"
-                          className={getInputClass('googleApiKey')}
-                          onFocus={() => setActiveField('googleApiKey')}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="braveSearchApiKey"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Brave Search API Key
-                      </FormLabel>
-                      <FormDescription className="text-[10px]">optional</FormDescription>
-                      <FormControl>
-                        <input
-                          {...field}
-                          type="password"
-                          className={getInputClass('braveSearchApiKey')}
-                          onFocus={() => setActiveField('braveSearchApiKey')}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="context7ApiKey"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Context7 API Key
-                      </FormLabel>
-                      <FormDescription className="text-[10px]">optional</FormDescription>
-                      <FormControl>
-                        <input
-                          {...field}
-                          type="password"
-                          className={getInputClass('context7ApiKey')}
-                          onFocus={() => setActiveField('context7ApiKey')}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <div aria-live="polite" className="text-[10px] text-muted-foreground">
-                  {isSaved ? 'Keys saved' : 'Press Enter to save'}
-                </div>
-                <button type="submit" className="sr-only" aria-label="Save API keys" />
-              </form>
-            </Form>
+            <ApiKeysSection
+              form={form}
+              handleSave={handleSave}
+              isSaved={isSaved}
+              lastSavedField={lastSavedField}
+              setActiveField={setActiveField}
+            />
             <div className="border-t pt-2 space-y-2">
               <div className="px-2 py-1 text-xs text-muted-foreground">Tools</div>
               <div className="space-y-2 px-2">
