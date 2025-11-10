@@ -26,8 +26,8 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 
 ### Context menu integration
 - The manifest now needs `contextMenus` in addition to `sidePanel/storage/activeTab` so Chrome allows adding a “Open in OpenSidebar” entry whenever the user selects text.
-- The background service worker registers that menu, handles the click synchronously (opening the side panel with the provided `tabId`), and keeps a small `pendingSelections` queue plus runtime messaging for the panel to consume once it finishes loading.
-- When the menu fires, the handler opens the panel immediately (no async work to preserve the user gesture) and enqueues the highlighted text; the panel then polls for any pending payloads via `chrome.runtime.sendMessage({ type: 'openSidebar_getPendingSelections' })`.
+- In `src/background.js`, the context-menu handler never awaits a promise or performs async work before calling `chrome.sidePanel.open({ tabId })` so the gesture that opened the menu remains active—`chrome.sidePanel.open` runs synchronously as soon as the user clicks the menu entry.
+- A lightweight `pendingSelections` queue collects the trimmed highlight and the panel pulls those payloads after it loads via `chrome.runtime.sendMessage({ type: 'openSidebar_getPendingSelections' })`, so the queue/`sendMessage` combo keeps the payload available even if the UI only comes online after the menu click.
 
 ### App shell & state
 - `src/App.jsx` is the control center: it loads chats/metadata via `chatStorage.js`, keeps `chatsData`/`currentChatId`/`chat` state, and wires `useStorage` for the OpenCode Zen API key (`apiKey`), the optional Google Gemini API key (`googleApiKey`), `selectedModelId`, and the current theme.
