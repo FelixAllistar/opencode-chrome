@@ -2,24 +2,24 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, BrainIcon, SearchIcon, X } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useStorage } from './hooks/useStorage.js';
+import { useApiKeyInputs } from './hooks/useApiKeyInputs.js';
+import { useProviderRegistrations } from './hooks/useProviderRegistrations.js';
+import { useContextSelectionBridge } from './hooks/useContextSelectionBridge.js';
+import { useUnhandledRejectionHandler } from './hooks/useUnhandledRejectionHandler.js';
+import { useChatBootstrap } from './hooks/useChatBootstrap.js';
 import { MODELS } from './utils/constants.js';
 import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index';
-import { setBraveSearchSubscriptionToken } from './services/ai/tools/braveSearchTool';
-import { setContext7ApiKey as registerContext7ApiKey } from './services/ai/tools/context7Tool';
 
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
 
 import { useOpenCodeChat } from './hooks/useOpenCodeChat.js';
 import {
-  getChatsList,
   createChat,
   loadChatMessages,
   saveChatMessages,
   deleteChat,
-  getCurrentChatId,
-  setCurrentChatId
+  setCurrentChatId,
 } from './utils/chatStorage.js';
-import { createUnhandledRejectionHandler } from './utils/errorHandling.js';
 import { AppSidebar } from './components/app-sidebar.jsx';
 import {
   SidebarProvider,
@@ -61,7 +61,6 @@ import {
   ChainOfThoughtSearchResult,
   ChainOfThoughtImage,
 } from './components/ai-elements/chain-of-thought.tsx';
-import { THEMES, THEME_VARIABLES } from './utils/themes.js';
 import { SettingsMenu } from './components/settings/SettingsMenu.jsx';
 import {
   PromptInput,
@@ -112,13 +111,6 @@ const CHAIN_OF_THOUGHT_STATUSES = {
 
 
 export default function App() {
-  const [chatsData, setChatsData] = useState({});
-  const [currentChatId, setCurrentChatIdState] = useState(null);
-  const [keyInput, setKeyInput] = useState('');
-  const [googleKeyInput, setGoogleKeyInput] = useState('');
-  const [braveKeyInput, setBraveKeyInput] = useState('');
-  const [context7KeyInput, setContext7KeyInput] = useState('');
-  const [openRouterKeyInput, setOpenRouterKeyInput] = useState('');
   const [apiKey, setApiKey, isApiKeyLoading] = useStorage('apiKey', '');
   const [googleApiKey, setGoogleApiKey, isGoogleApiKeyLoading] = useStorage('googleApiKey', '');
   const [braveSearchApiKey, setBraveSearchApiKey, isBraveSearchApiKeyLoading] = useStorage('braveSearchApiKey', '');
@@ -127,86 +119,49 @@ export default function App() {
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [enabledToolIds, setEnabledToolIds] = useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS);
-  const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
   const [attachedContextSnippets, setAttachedContextSnippets] = useState([]);
-
-  // Load theme immediately for loading screen
-  const [theme, setTheme] = useStorage('theme', 'zenburn');
-  const [isDark, setIsDark] = useState(true);
-  const [sidebarVisible, setSidebarVisible] = useState(true);
   const inputRef = useRef(null);
+  const {
+    chatsData,
+    currentChatId,
+    isInitialDataLoading,
+    setChatsData,
+    setCurrentChatIdState,
+  } = useChatBootstrap({ inputRef });
+  const {
+    inputs,
+    updateInput: updateKeyInput,
+    setInputsState: setKeyInputsState,
+  } = useApiKeyInputs({
+    apiKey,
+    googleApiKey,
+    braveSearchApiKey,
+    context7ApiKey,
+    openRouterApiKey,
+  });
+  const {
+    apiKey: keyInput,
+    googleApiKey: googleKeyInput,
+    braveSearchApiKey: braveKeyInput,
+    context7ApiKey: context7KeyInput,
+    openRouterApiKey: openRouterKeyInput,
+  } = inputs;
+
+  useProviderRegistrations({
+    braveSearchApiKey,
+    context7ApiKey,
+  });
+
   const currentChatIdRef = useRef(currentChatId);
   const currentChatMessagesRef = useRef([]);
 
-  // Handle unhandled promise rejections at the app level
-  useEffect(() => {
-    const handleUnhandledRejection = createUnhandledRejectionHandler(
-      () => currentChatId,
-      () => chatsData,
-      setChatsData
-    );
-
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
-
-    return () => {
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-    };
-  }, [currentChatId, chatsData, setChatsData]);
-
-  useEffect(() => {
-    setKeyInput(apiKey);
-  }, [apiKey]);
-
-  useEffect(() => {
-    setGoogleKeyInput(googleApiKey);
-  }, [googleApiKey]);
-
-  useEffect(() => {
-    setBraveKeyInput(braveSearchApiKey);
-  }, [braveSearchApiKey]);
-
-  useEffect(() => {
-    setContext7KeyInput(context7ApiKey);
-  }, [context7ApiKey]);
-
-  useEffect(() => {
-    setOpenRouterKeyInput(openRouterApiKey);
-  }, [openRouterApiKey]);
-
-  useEffect(() => {
-    setBraveSearchSubscriptionToken(braveSearchApiKey);
-  }, [braveSearchApiKey]);
-
-  useEffect(() => {
-    registerContext7ApiKey(context7ApiKey);
-  }, [context7ApiKey]);
+  useUnhandledRejectionHandler({
+    currentChatId,
+    chatsData,
+    setChatsData,
+  });
 
 
-
-  // Apply theme immediately for loading screen
-  useEffect(() => {
-    const applyTheme = (themeName, darkMode) => {
-      const themeData = THEMES[themeName];
-      if (!themeData) return;
-
-      const root = document.documentElement;
-
-      Object.entries(THEME_VARIABLES).forEach(([cssVar, themeKey]) => {
-        const color = themeData[themeKey]?.[darkMode ? 'dark' : 'light'];
-        if (color) {
-          root.style.setProperty(cssVar, color);
-        }
-      });
-
-      root.style.setProperty('--card-text', '#1a1a1a');
-      root.style.setProperty('--card-text-muted', '#4a4a4a');
-
-      root.classList.remove('light', 'dark');
-      root.classList.add(darkMode ? 'dark' : 'light');
-    };
-
-    applyTheme(theme, isDark);
-  }, [theme, isDark]);
 
   const handleToggleTool = useCallback((toolId, enable) => {
     setEnabledToolIds((previous) => {
@@ -267,59 +222,6 @@ export default function App() {
   }, [currentChatMessages]);
 
 
-
-  // Load chats and current chat on mount
-  useEffect(() => {
-    const loadInitialData = async () => {
-      const [chatsList, currentId] = await Promise.all([
-        getChatsList(),
-        getCurrentChatId()
-      ]);
-
-      const newChatsData = {};
-      for (const chat of chatsList) {
-        newChatsData[chat.id] = {
-          metadata: chat,
-          messages: [],
-          status: 'ready'
-        };
-      }
-
-      let activeChatId = currentId;
-      if (!activeChatId && chatsList.length > 0) {
-        activeChatId = chatsList[0].id;
-        await setCurrentChatId(activeChatId);
-      }
-
-        if (activeChatId && newChatsData[activeChatId]) {
-          const chatMessages = await loadChatMessages(activeChatId);
-          // Reset any streaming/submitted statuses since they can't persist across app restarts
-          const resetMessages = chatMessages.map(msg => ({
-            ...msg,
-            status: msg.status === 'streaming' || msg.status === 'submitted' ? 'ready' : msg.status
-          }));
-          newChatsData[activeChatId].messages = resetMessages;
-          setCurrentChatIdState(activeChatId);
-        }
-
-       setChatsData(newChatsData);
-      setIsInitialDataLoading(false);
-    };
-
-    loadInitialData();
-  }, []);
-
-  // Focus input when initial data loading completes and we have a current chat
-  useEffect(() => {
-    if (!isInitialDataLoading && currentChatId && inputRef.current) {
-      // Small delay to ensure DOM is fully rendered
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-        }
-      }, 100);
-    }
-  }, [isInitialDataLoading, currentChatId]);
 
   const createNewChat = useCallback(async () => {
     const newChatMetadata = await createChat();
@@ -523,53 +425,17 @@ export default function App() {
     setAttachedContextSnippets((prev) => prev.filter((snippet) => snippet.id !== id));
   }, []);
 
-  useEffect(() => {
-    if (typeof chrome === 'undefined' || !chrome.runtime) {
-      return;
-    }
+  useContextSelectionBridge({
+    onExternalSelection: handleExternalSelection,
+    onAttachContext: handleAttachContext,
+  });
 
-    const handleRuntimeMessage = (message) => {
-      if (message?.type === 'openSidebar_contextSelection') {
-        void handleExternalSelection(message.payload?.text);
-      }
-      if (message?.type === 'openSidebar_contextAttachment') {
-        void handleAttachContext(message.payload?.text);
-      }
-    };
-
-    chrome.runtime.onMessage.addListener(handleRuntimeMessage);
-
-    if (typeof chrome.runtime.sendMessage === 'function') {
-      chrome.runtime.sendMessage(
-        { type: 'openSidebar_getPendingSelections' },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            return;
-          }
-
-          const selections = response?.selections;
-          if (Array.isArray(selections) && selections.length > 0) {
-            (async () => {
-              for (const selection of selections) {
-                if (!selection?.text) {
-                  continue;
-                }
-                if (selection.type === 'attach') {
-                  await handleAttachContext(selection.text);
-                } else {
-                  await handleExternalSelection(selection.text);
-                }
-              }
-            })();
-          }
-        }
-      );
-    }
-
-    return () => {
-      chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
-    };
-  }, [handleAttachContext, handleExternalSelection]);
+  const handleSetupInputChange = useCallback(
+    (field) => (event) => {
+      updateKeyInput(field, event.target.value);
+    },
+    [updateKeyInput]
+  );
 
   const changeModel = (modelId) => {
     const model = MODELS.find(m => m.id === modelId);
@@ -578,23 +444,25 @@ export default function App() {
     }
   };
 
-const clearSettings = () => {
-  chrome.storage.sync.clear();
-  chrome.storage.local.clear();
-  setApiKey('');
-  setGoogleApiKey('');
-  setBraveSearchApiKey('');
-  setContext7ApiKeyStorage('');
-  setOpenRouterApiKey('');
-  setKeyInput('');
-  setGoogleKeyInput('');
-  setBraveKeyInput('');
-  setContext7KeyInput('');
-  setOpenRouterKeyInput('');
-  setSelectedModelId(MODELS[0].id);
-  setChatsData({});
-  setCurrentChatIdState(null);
-};
+  const clearSettings = () => {
+    chrome.storage.sync.clear();
+    chrome.storage.local.clear();
+    setApiKey('');
+    setGoogleApiKey('');
+    setBraveSearchApiKey('');
+    setContext7ApiKeyStorage('');
+    setOpenRouterApiKey('');
+    setKeyInputsState({
+      apiKey: '',
+      googleApiKey: '',
+      braveSearchApiKey: '',
+      context7ApiKey: '',
+      openRouterApiKey: '',
+    });
+    setSelectedModelId(MODELS[0].id);
+    setChatsData({});
+    setCurrentChatIdState(null);
+  };
 
   // Convert AI SDK 5.0 parts to chain-of-thought format
   const convertPartsToChainOfThought = (parts) => {
@@ -899,7 +767,7 @@ const clearSettings = () => {
         <p className="mb-4">Enter your OpenCode Zen API key:</p>
         <input
           value={keyInput}
-          onChange={e => setKeyInput(e.target.value)}
+          onChange={handleSetupInputChange('apiKey')}
           className="border p-2 mb-4"
           placeholder="API Key"
           type="password"
@@ -909,7 +777,7 @@ const clearSettings = () => {
         </p>
         <input
           value={googleKeyInput}
-          onChange={e => setGoogleKeyInput(e.target.value)}
+          onChange={handleSetupInputChange('googleApiKey')}
           className="border p-2 mb-4"
           placeholder="Gemini API Key (optional)"
           type="password"
@@ -919,7 +787,7 @@ const clearSettings = () => {
         </p>
         <input
           value={openRouterKeyInput}
-          onChange={e => setOpenRouterKeyInput(e.target.value)}
+          onChange={handleSetupInputChange('openRouterApiKey')}
           className="border p-2 mb-4"
           placeholder="OpenRouter API Key (optional)"
           type="password"
@@ -929,7 +797,7 @@ const clearSettings = () => {
         </p>
         <input
           value={braveKeyInput}
-          onChange={e => setBraveKeyInput(e.target.value)}
+          onChange={handleSetupInputChange('braveSearchApiKey')}
           className="border p-2 mb-4"
           placeholder="Brave Search API Key (optional)"
           type="password"
@@ -939,7 +807,7 @@ const clearSettings = () => {
         </p>
         <input
           value={context7KeyInput}
-          onChange={e => setContext7KeyInput(e.target.value)}
+          onChange={handleSetupInputChange('context7ApiKey')}
           className="border p-2 mb-4"
           placeholder="Context7 API Key (optional)"
           type="password"
