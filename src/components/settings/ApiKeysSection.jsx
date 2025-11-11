@@ -76,6 +76,25 @@ export const ApiKeysSection = ({
             />
             <FormField
               control={form.control}
+              name="openRouterApiKey"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-muted-foreground">
+                    OpenRouter API Key
+                  </FormLabel>
+                  <FormControl>
+                    <input
+                      {...field}
+                      type="password"
+                      className={getInputClass('openRouterApiKey')}
+                      onFocus={() => setActiveField('openRouterApiKey')}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
               name="braveSearchApiKey"
               render={({ field }) => (
                 <FormItem>

@@ -118,10 +118,12 @@ export default function App() {
   const [googleKeyInput, setGoogleKeyInput] = useState('');
   const [braveKeyInput, setBraveKeyInput] = useState('');
   const [context7KeyInput, setContext7KeyInput] = useState('');
+  const [openRouterKeyInput, setOpenRouterKeyInput] = useState('');
   const [apiKey, setApiKey, isApiKeyLoading] = useStorage('apiKey', '');
   const [googleApiKey, setGoogleApiKey, isGoogleApiKeyLoading] = useStorage('googleApiKey', '');
   const [braveSearchApiKey, setBraveSearchApiKey, isBraveSearchApiKeyLoading] = useStorage('braveSearchApiKey', '');
   const [context7ApiKey, setContext7ApiKeyStorage, isContext7ApiKeyLoading] = useStorage('context7ApiKey', '');
+  const [openRouterApiKey, setOpenRouterApiKey, isOpenRouterApiKeyLoading] = useStorage('openRouterApiKey', '');
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [enabledToolIds, setEnabledToolIds] = useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS);
@@ -166,6 +168,10 @@ export default function App() {
   useEffect(() => {
     setContext7KeyInput(context7ApiKey);
   }, [context7ApiKey]);
+
+  useEffect(() => {
+    setOpenRouterKeyInput(openRouterApiKey);
+  }, [openRouterApiKey]);
 
   useEffect(() => {
     setBraveSearchSubscriptionToken(braveSearchApiKey);
@@ -231,6 +237,7 @@ export default function App() {
     setChatsData,
     apiKey,
     googleApiKey,
+    openRouterApiKey,
     selectedModel,
     enabledToolIds,
     onError: (errorForUI) => {
@@ -396,14 +403,22 @@ export default function App() {
     setGoogleApiKey(googleKeyInput);
     setBraveSearchApiKey(braveKeyInput);
     setContext7ApiKeyStorage(context7KeyInput);
+    setOpenRouterApiKey(openRouterKeyInput);
     setSelectedModelId(selectedModel.id);
   };
 
-  const handleSaveKeys = (newApiKey, newGoogleApiKey, newBraveSearchApiKey, newContext7ApiKey) => {
+  const handleSaveKeys = (
+    newApiKey,
+    newGoogleApiKey,
+    newBraveSearchApiKey,
+    newContext7ApiKey,
+    newOpenRouterApiKey
+  ) => {
     setApiKey(newApiKey);
     setGoogleApiKey(newGoogleApiKey);
     setBraveSearchApiKey(newBraveSearchApiKey);
     setContext7ApiKeyStorage(newContext7ApiKey);
+    setOpenRouterApiKey(newOpenRouterApiKey);
   };
 
   const handleSend = useCallback(async (message, event) => {
@@ -427,7 +442,11 @@ export default function App() {
     const hasText = combinedText.trim().length > 0;
     const hasAttachments = Boolean(message.files?.length);
     const hasContext = contexts.length > 0;
-    const requiredKey = selectedModel?.type === 'google' ? googleApiKey : apiKey;
+    const requiredKey = selectedModel?.type === 'google'
+      ? googleApiKey
+      : selectedModel?.type === 'openrouter'
+        ? openRouterApiKey
+        : apiKey;
 
     // Follow AI SDK pattern: disable input during error states
     if (!requiredKey || !(hasText || hasAttachments || hasContext) || currentChat.status === 'error') {
@@ -566,10 +585,12 @@ const clearSettings = () => {
   setGoogleApiKey('');
   setBraveSearchApiKey('');
   setContext7ApiKeyStorage('');
+  setOpenRouterApiKey('');
   setKeyInput('');
   setGoogleKeyInput('');
   setBraveKeyInput('');
   setContext7KeyInput('');
+  setOpenRouterKeyInput('');
   setSelectedModelId(MODELS[0].id);
   setChatsData({});
   setCurrentChatIdState(null);
@@ -861,6 +882,7 @@ const clearSettings = () => {
     isGoogleApiKeyLoading ||
     isBraveSearchApiKeyLoading ||
     isContext7ApiKeyLoading ||
+    isOpenRouterApiKeyLoading ||
     isModelLoading ||
     isInitialDataLoading
   ) {
@@ -890,6 +912,16 @@ const clearSettings = () => {
           onChange={e => setGoogleKeyInput(e.target.value)}
           className="border p-2 mb-4"
           placeholder="Gemini API Key (optional)"
+          type="password"
+        />
+        <p className="mb-2 text-sm text-muted-foreground">
+          Optional: add an OpenRouter API key to access OpenRouter-hosted models.
+        </p>
+        <input
+          value={openRouterKeyInput}
+          onChange={e => setOpenRouterKeyInput(e.target.value)}
+          className="border p-2 mb-4"
+          placeholder="OpenRouter API Key (optional)"
           type="password"
         />
         <p className="mb-2 text-sm text-muted-foreground">
@@ -959,6 +991,7 @@ const clearSettings = () => {
                   googleApiKey={googleApiKey}
                   braveSearchApiKey={braveSearchApiKey}
                   context7ApiKey={context7ApiKey}
+                  openRouterApiKey={openRouterApiKey}
                   onSaveKeys={handleSaveKeys}
                   onClear={clearSettings}
                   enabledTools={enabledToolIds ?? DEFAULT_ENABLED_TOOL_IDS}

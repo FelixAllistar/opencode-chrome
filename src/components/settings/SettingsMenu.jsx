@@ -16,6 +16,7 @@ const settingsSchema = z.object({
   googleApiKey: z.string(),
   braveSearchApiKey: z.string(),
   context7ApiKey: z.string(),
+  openRouterApiKey: z.string(),
 });
 
 export const SettingsMenu = ({
@@ -23,6 +24,7 @@ export const SettingsMenu = ({
   googleApiKey = '',
   braveSearchApiKey = '',
   context7ApiKey = '',
+  openRouterApiKey = '',
   enabledTools = [],
   onSaveKeys,
   onClear,
@@ -41,7 +43,8 @@ export const SettingsMenu = ({
       openCodeApiKey: apiKey,
       googleApiKey,
       braveSearchApiKey,
-      context7ApiKey
+      context7ApiKey,
+      openRouterApiKey
     }
   });
 
@@ -50,9 +53,10 @@ export const SettingsMenu = ({
       openCodeApiKey: apiKey,
       googleApiKey,
       braveSearchApiKey,
-      context7ApiKey
+      context7ApiKey,
+      openRouterApiKey
     });
-  }, [apiKey, googleApiKey, braveSearchApiKey, context7ApiKey, form]);
+  }, [apiKey, googleApiKey, braveSearchApiKey, context7ApiKey, openRouterApiKey, form]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -78,7 +82,8 @@ export const SettingsMenu = ({
       values.openCodeApiKey,
       values.googleApiKey,
       values.braveSearchApiKey,
-      values.context7ApiKey
+      values.context7ApiKey,
+      values.openRouterApiKey
     );
 
     setIsSaved(true);
@@ -99,7 +104,8 @@ export const SettingsMenu = ({
       openCodeApiKey: '',
       googleApiKey: '',
       braveSearchApiKey: '',
-      context7ApiKey: ''
+      context7ApiKey: '',
+      openRouterApiKey: ''
     });
     setIsOpen(false);
     setIsSaved(false);

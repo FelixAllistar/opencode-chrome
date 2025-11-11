@@ -14,5 +14,7 @@ export const MODELS = [
   { id: 'gemini-2.5-flash-image', name: 'Nano Banana (Paid Only)', type: 'google', isVision: true },
   { id: 'gemini-flash-latest', name: 'Flash', type: 'google', isVision: true },
   { id: 'gemini-flash-lite-latest', name: 'Flash Lite', type: 'google', isVision: true },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', type: 'google', isVision: true }
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', type: 'google', isVision: true },
+  { id: 'openrouter/polaris-alpha', name: 'Polaris Alpha', type: 'openrouter', isVision: true },
+  { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', name: 'Venice', type: 'openrouter', isVision: false }
 ];

@@ -104,6 +104,7 @@ export function useOpenCodeChat({
   setChatsData,
   apiKey,
   googleApiKey,
+  openRouterApiKey,
   selectedModel,
   enabledToolIds,
   onError
@@ -118,14 +119,25 @@ export function useOpenCodeChat({
   const isVisionModel = Boolean(selectedModel?.isVision ?? true);
   const tools = getTools(enabledToolIds);
 
-  const requiredApiKey = useMemo(
-    () => (selectedModel?.type === 'google' ? googleApiKey : apiKey),
-    [selectedModel?.type, googleApiKey, apiKey]
-  );
+  const requiredApiKey = useMemo(() => {
+    if (selectedModel?.type === 'google') {
+      return googleApiKey;
+    }
+
+    if (selectedModel?.type === 'openrouter') {
+      return openRouterApiKey;
+    }
+
+    return apiKey;
+  }, [selectedModel?.type, googleApiKey, openRouterApiKey, apiKey]);
 
   const providerApiKeys = useMemo(
-    () => ({ openCode: apiKey, google: googleApiKey }),
-    [apiKey, googleApiKey]
+    () => ({
+      openCode: apiKey,
+      google: googleApiKey,
+      openRouter: openRouterApiKey
+    }),
+    [apiKey, googleApiKey, openRouterApiKey]
   );
 
   const prepareMessagesForModel = useCallback(
@@ -161,6 +173,10 @@ export function useOpenCodeChat({
 
   // Simple network connectivity test
   const testConnectivity = useCallback(async () => {
+    if (selectedModel?.type === 'openrouter') {
+      return true;
+    }
+
     try {
       const response = await fetch('https://opencode.ai/zen/v1/models', {
         method: 'GET',
@@ -175,7 +191,7 @@ export function useOpenCodeChat({
     } catch (error) {
       return false;
     }
-  }, [apiKey]);
+  }, [apiKey, selectedModel?.type]);
 
   
   // Helper function to check if we can send messages
