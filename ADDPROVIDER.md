@@ -12,6 +12,7 @@ Follow these steps:
 ## 1. Extend the API key surface
 
 - `useStorage` reads `chrome.storage.sync`, so add a new call site in `src/App.jsx` (similar to `apiKey`/`googleApiKey`) so the key has a persistent `useStorage('yourNewApiKey')` hook.
+- Remember that `src/App.jsx` now keeps editable API-key drafts in sync via `src/hooks/useApiKeyInputs.js`, so when you add a new key you should pass it through that helper (and `handleSetupInputChange`) before wiring it into `SettingsMenu`.
 - Update the behavior in `ApiKeysSection.jsx`/`SettingsMenu.jsx`:
   - Add the new key field to the Zod schema that backs the settings form.
   - Render another `<FormField>` in `ApiKeysSection` so the user can type/paste the key.

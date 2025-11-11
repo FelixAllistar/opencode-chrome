@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useRef, useCallback } from 'react';
 import { Plus, BrainIcon, SearchIcon, X } from 'lucide-react';
-import { nanoid } from 'nanoid';
 import { useStorage } from './hooks/useStorage.js';
 import { useApiKeyInputs } from './hooks/useApiKeyInputs.js';
 import { useProviderRegistrations } from './hooks/useProviderRegistrations.js';
-import { useContextSelectionBridge } from './hooks/useContextSelectionBridge.js';
 import { useUnhandledRejectionHandler } from './hooks/useUnhandledRejectionHandler.js';
 import { useChatBootstrap } from './hooks/useChatBootstrap.js';
+import { useConversationLifecycle } from './hooks/useConversationLifecycle.js';
 import { MODELS } from './utils/constants.js';
 import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index';
 
@@ -119,7 +118,6 @@ export default function App() {
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const [enabledToolIds, setEnabledToolIds] = useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS);
-  const [attachedContextSnippets, setAttachedContextSnippets] = useState([]);
   const inputRef = useRef(null);
   const {
     chatsData,
@@ -152,16 +150,82 @@ export default function App() {
     context7ApiKey,
   });
 
-  const currentChatIdRef = useRef(currentChatId);
-  const currentChatMessagesRef = useRef([]);
-
   useUnhandledRejectionHandler({
     currentChatId,
     chatsData,
     setChatsData,
   });
 
+  const createNewChat = useCallback(async () => {
+    const newChatMetadata = await createChat();
 
+    setChatsData(prev => ({
+      ...prev,
+      [newChatMetadata.id]: {
+        metadata: newChatMetadata,
+        messages: [],
+        status: 'ready'
+      }
+    }));
+
+    setCurrentChatIdState(newChatMetadata.id);
+    await setCurrentChatId(newChatMetadata.id);
+
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 0);
+
+    return newChatMetadata.id;
+  }, [setChatsData, setCurrentChatIdState, setCurrentChatId]);
+
+  const switchChat = async (chatId) => {
+    if (chatId === currentChatId) return;
+
+    setCurrentChatIdState(chatId);
+    await setCurrentChatId(chatId);
+
+    if (chatsData[chatId] && chatsData[chatId].messages.length === 0) {
+      const messages = await loadChatMessages(chatId);
+      const resetMessages = messages.map(msg => ({
+        ...msg,
+        status: msg.status === 'streaming' || msg.status === 'submitted' ? 'ready' : msg.status
+      }));
+      setChatsData(prev => ({
+        ...prev,
+        [chatId]: {
+          ...prev[chatId],
+          messages: resetMessages
+        }
+      }));
+    }
+
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 100);
+  };
+
+  const deleteChatById = async (chatId) => {
+    await deleteChat(chatId);
+
+    setChatsData(prev => {
+      const newChats = { ...prev };
+      delete newChats[chatId];
+      return newChats;
+    });
+
+    if (chatId === currentChatId) {
+      const remainingChats = Object.values(chatsData).map(c => c.metadata).filter(c => c.id !== chatId).sort((a, b) => b.updatedAt - a.updatedAt);
+      if (remainingChats.length > 0) {
+        await switchChat(remainingChats[0].id);
+      } else {
+        setCurrentChatIdState(null);
+      }
+    }
+  };
 
   const handleToggleTool = useCallback((toolId, enable) => {
     setEnabledToolIds((previous) => {
@@ -181,10 +245,6 @@ export default function App() {
     });
   }, [setEnabledToolIds]);
 
-  // Ref to hold the latest chatsData to solve stale state in async callbacks
-  const chatsDataRef = useRef();
-  chatsDataRef.current = chatsData;
-
   // Use our custom useOpenCodeChat hook
   const chat = useOpenCodeChat({
     currentChatId,
@@ -201,11 +261,6 @@ export default function App() {
     }
   });
 
-  const chatRef = useRef(chat);
-  useEffect(() => {
-    chatRef.current = chat;
-  }, [chat]);
-
   // The useOpenCodeChat hook handles updating chatsData internally
 
   // Derived state from chatsData
@@ -213,92 +268,21 @@ export default function App() {
   const currentChatMessages = chat.messages || [];
   const currentChatStatus = chat.status;
 
-  useEffect(() => {
-    currentChatIdRef.current = currentChatId;
-  }, [currentChatId]);
-
-  useEffect(() => {
-    currentChatMessagesRef.current = currentChatMessages;
-  }, [currentChatMessages]);
-
-
-
-  const createNewChat = useCallback(async () => {
-    const newChatMetadata = await createChat();
-
-    setChatsData(prev => ({
-      ...prev,
-      [newChatMetadata.id]: {
-        metadata: newChatMetadata,
-        messages: [],
-        status: 'ready'
-      }
-    }));
-
-    setCurrentChatIdState(newChatMetadata.id);
-    setAttachedContextSnippets([]);
-    await setCurrentChatId(newChatMetadata.id);
-
-    // Focus the input after creating new chat
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, 0);
-
-    return newChatMetadata.id;
-  }, [setAttachedContextSnippets, setChatsData, setCurrentChatIdState, setCurrentChatId]);
-
-  const switchChat = async (chatId) => {
-    if (chatId === currentChatId) return;
-
-    setAttachedContextSnippets([]);
-    setCurrentChatIdState(chatId);
-    await setCurrentChatId(chatId);
-
-    // Load messages if they haven't been loaded yet
-    if (chatsData[chatId] && chatsData[chatId].messages.length === 0) {
-      const messages = await loadChatMessages(chatId);
-      // Reset any streaming/submitted statuses since they can't persist across app restarts
-      const resetMessages = messages.map(msg => ({
-        ...msg,
-        status: msg.status === 'streaming' || msg.status === 'submitted' ? 'ready' : msg.status
-      }));
-      setChatsData(prev => ({
-        ...prev,
-        [chatId]: {
-          ...prev[chatId],
-          messages: resetMessages
-        }
-      }));
-    }
-
-    // Focus the input after switching chat
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, 100);
-  };
-
-  const deleteChatById = async (chatId) => {
-    await deleteChat(chatId);
-    
-    setChatsData(prev => {
-      const newChats = { ...prev };
-      delete newChats[chatId];
-      return newChats;
-    });
-
-    if (chatId === currentChatId) {
-      const remainingChats = Object.values(chatsData).map(c => c.metadata).filter(c => c.id !== chatId).sort((a, b) => b.updatedAt - a.updatedAt);
-      if (remainingChats.length > 0) {
-        await switchChat(remainingChats[0].id);
-      } else {
-        setCurrentChatIdState(null);
-      }
-    }
-  };
+  const {
+    attachedContextSnippets,
+    handleSend,
+    removeContextSnippet,
+  } = useConversationLifecycle({
+    chat,
+    currentChatId,
+    createNewChat,
+    selectedModel,
+    apiKey,
+    googleApiKey,
+    openRouterApiKey,
+    inputRef,
+    isInitialDataLoading,
+  });
 
   const saveSettings = () => {
     setApiKey(keyInput);
@@ -322,113 +306,6 @@ export default function App() {
     setContext7ApiKeyStorage(newContext7ApiKey);
     setOpenRouterApiKey(newOpenRouterApiKey);
   };
-
-  const handleSend = useCallback(async (message, event) => {
-    const currentChat = chatRef.current;
-    let chatId = currentChatId;
-    if (!chatId) {
-      chatId = await createNewChat();
-    }
-
-    const contexts = attachedContextSnippets
-      .map((entry) => entry.text?.trim())
-      .filter(Boolean);
-    const userText = (message.text ?? '').trim();
-    const contextBlock = contexts.length
-      ? `Attached context:` +
-        `\n${contexts.join('\n\n')}`
-      : '';
-    const combinedText = [contextBlock, userText]
-      .filter(Boolean)
-      .join('\n\n');
-    const hasText = combinedText.trim().length > 0;
-    const hasAttachments = Boolean(message.files?.length);
-    const hasContext = contexts.length > 0;
-    const requiredKey = selectedModel?.type === 'google'
-      ? googleApiKey
-      : selectedModel?.type === 'openrouter'
-        ? openRouterApiKey
-        : apiKey;
-
-    // Follow AI SDK pattern: disable input during error states
-    if (!requiredKey || !(hasText || hasAttachments || hasContext) || currentChat.status === 'error') {
-      // Don't clear error automatically - let user explicitly dismiss or retry
-      return;
-    }
-
-    // Only allow sending when status is 'ready'
-    if (currentChat.status !== 'ready') {
-      return;
-    }
-
-    const payload = {
-      ...message,
-      text: combinedText,
-    };
-
-    try {
-      // Use our chat hook to send the message
-      await currentChat.sendMessage(payload);
-      setAttachedContextSnippets([]);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      // Error handling is managed by the useOpenCodeChat hook
-    }
-  }, [apiKey, attachedContextSnippets, createNewChat, currentChatId, googleApiKey, selectedModel]);
-
-  const handleExternalSelection = useCallback(async (rawText) => {
-    const text = rawText?.trim();
-    if (!text) {
-      return;
-    }
-
-    const hasExistingMessages = currentChatMessagesRef.current.length > 0;
-    const requiresNewChat = !currentChatIdRef.current || hasExistingMessages;
-
-    if (requiresNewChat) {
-      await createNewChat();
-    }
-
-    const textarea = inputRef.current;
-    if (textarea) {
-      textarea.value = text;
-      textarea.form?.requestSubmit();
-    } else {
-      await handleSend({ text });
-    }
-  }, [createNewChat, handleSend]);
-
-  const handleAttachContext = useCallback(async (rawText) => {
-    const text = rawText?.trim();
-    if (!text) {
-      return;
-    }
-
-    if (!currentChatIdRef.current) {
-      await createNewChat();
-    }
-
-    setAttachedContextSnippets((prev) => [
-      ...prev,
-      {
-        id: nanoid(),
-        text,
-      },
-    ]);
-
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [createNewChat]);
-
-  const removeContextSnippet = useCallback((id) => {
-    setAttachedContextSnippets((prev) => prev.filter((snippet) => snippet.id !== id));
-  }, []);
-
-  useContextSelectionBridge({
-    onExternalSelection: handleExternalSelection,
-    onAttachContext: handleAttachContext,
-  });
 
   const handleSetupInputChange = useCallback(
     (field) => (event) => {

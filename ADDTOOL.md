@@ -17,6 +17,7 @@
    - If the tool needs an external token, add a `useStorage` hook in `App.jsx` (for example `useStorage('braveSearchApiKey', '')`) so the key survives reloads.
    - Surface a new input in the settings menu or onboarding screen (the API key inputs now live inside the collapsible `ApiKeysSection` component at `src/components/settings/ApiKeysSection.jsx`), extend the `onSaveKeys` flow (and its callers) to include the additional setter, and rely on the shared shadcn `<Form />` powered by `react-hook-form`/`zod` so pressing Enter submits every key input in the section at once (with a hidden submit button for keyboard support) and saves them together. The labels now stay concise without any “optional” callouts.
    - Expose a helper (like `setBraveSearchSubscriptionToken`) that stores the key in memory for the tool to read or pass the stored value down to the tool when calling `streamText`.
+   - If the tool also needs to coordinate with attached-context snippets or Chrome context selections, hook into `src/hooks/useConversationLifecycle.js` rather than reimplementing the context bridge in `App.jsx`.
 6. **Validate**
    - Run `pnpm run typecheck` (or `pnpm run build`, which runs it first). Changing `TOOL_DEFINITIONS` without an import now errors before the bundle.
 
