@@ -154,6 +154,12 @@ export function useOpenCodeChat({
     [apiKey, googleApiKey, openRouterApiKey, anthropicApiKey, openaiApiKey]
   );
 
+  const getMissingApiKeyError = useCallback(() => {
+    const providerLabel = selectedModel?.name || selectedModel?.type || 'selected model';
+    const message = `Missing API key for ${providerLabel}. Please set it in Settings and retry.`;
+    return { name: 'MissingApiKey', message, error: message };
+  }, [selectedModel]);
+
   const prepareMessagesForModel = useCallback(
     (messages) => {
       return messages.map((message) => ({
@@ -249,11 +255,26 @@ export function useOpenCodeChat({
       }
     }
 
-    // Check if we can regenerate messages
-    if (!requiredApiKey || !currentChatId) return;
-
-    // Create AbortController for this regeneration
-    abortControllerRef.current = new AbortController();
+    if (!requiredApiKey || !currentChatId) {
+      const errorObj = getMissingApiKeyError();
+      setError(errorObj);
+      if (currentChatId) {
+        setChatsData(prev => ({
+          ...prev,
+          [currentChatId]: {
+            ...prev[currentChatId],
+            status: 'error',
+            messages: contextMessages
+          }
+        }));
+      }
+      setStatus('error');
+      statusRef.current = 'error';
+      if (onError) {
+        onError(errorObj);
+      }
+      return;
+    }
 
     // Create a temporary AI message to track the regeneration
     const aiMessageId = `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -266,6 +287,8 @@ export function useOpenCodeChat({
 
     // Add the AI message to the conversation
     const messagesWithAI = [...contextMessages, aiMessage];
+
+    // Set up streaming
     setMessages(messagesWithAI);
     setChatsData(prev => ({
       ...prev,
@@ -275,7 +298,6 @@ export function useOpenCodeChat({
       }
     }));
 
-    // Set up streaming
     setStatus('streaming');
     statusRef.current = 'streaming';
     setChatsData(prev => ({
@@ -545,7 +567,7 @@ export function useOpenCodeChat({
     } finally {
       abortControllerRef.current = null;
     }
-  }, [currentChatId, setChatsData, selectedModel, requiredApiKey, providerApiKeys, onError, testConnectivity]);
+  }, [currentChatId, setChatsData, selectedModel, requiredApiKey, providerApiKeys, onError, testConnectivity, getMissingApiKeyError]);
 
   // Custom sendMessage that integrates with your chat system
   const sendMessage = useCallback(async (message) => {
@@ -625,6 +647,28 @@ export function useOpenCodeChat({
     // AI SDK handles message filtering automatically
     const allMessages = [...messages, userMessage];
 
+    // If required API key is missing, bail out before creating the assistant message
+    if (!requiredApiKey) {
+      const errorObj = getMissingApiKeyError();
+      setMessages(allMessages);
+      setStatus('error');
+      statusRef.current = 'error';
+      setError(errorObj);
+      setChatsData(prev => ({
+        ...prev,
+        [currentChatId]: {
+          ...prev[currentChatId],
+          messages: allMessages,
+          status: 'error'
+        }
+      }));
+      if (onError) {
+        onError(errorObj);
+      }
+      await saveChatMessages(currentChatId, allMessages);
+      return;
+    }
+
     // Update state immediately
     const initialMessages = [...allMessages, aiMessage];
     setMessages(initialMessages);
@@ -645,43 +689,6 @@ export function useOpenCodeChat({
 
     // Track the current messages during streaming
     let currentStreamingMessages = initialMessages;
-
-    if (!requiredApiKey) {
-      const providerLabel = selectedModel?.name || selectedModel?.type || 'selected model';
-      const errMsg = `Missing API key for ${providerLabel}. Please set it in Settings and retry.`;
-      const errorObj = { name: 'MissingApiKey', message: errMsg, error: errMsg };
-
-      const errorMessages = currentStreamingMessages.map((msg) =>
-        msg.id === aiMessageId
-          ? {
-              ...msg,
-              status: 'error',
-              parts: [{ type: 'text', text: errMsg }]
-            }
-          : msg
-      );
-
-      currentStreamingMessages = errorMessages;
-      setMessages(errorMessages);
-      setStatus('error');
-      statusRef.current = 'error';
-      setError(errorObj);
-      setChatsData((prev) => ({
-        ...prev,
-        [currentChatId]: {
-          ...prev[currentChatId],
-          messages: errorMessages,
-          status: 'error'
-        }
-      }));
-
-      if (onError) {
-        onError(errorObj);
-      }
-
-      await saveChatMessages(currentChatId, errorMessages);
-      return;
-    }
 
     try {
       setStatus('streaming');
@@ -983,7 +990,7 @@ export function useOpenCodeChat({
     } finally {
       abortControllerRef.current = null;
     }
-  }, [currentChatId, messages, requiredApiKey, providerApiKeys, selectedModel, chatsData, setChatsData, onError, testConnectivity]);
+  }, [currentChatId, messages, requiredApiKey, providerApiKeys, selectedModel, chatsData, setChatsData, onError, testConnectivity, getMissingApiKeyError]);
 
   // Stop generation
   const stop = useCallback(() => {
@@ -1058,7 +1065,7 @@ export function useOpenCodeChat({
     // Create a regeneration function that doesn't add a new user message
     // Instead, it reuses the existing message context
     await regenerateResponse(messagesToRetry);
-  }, [messages, currentChatId, setChatsData, selectedModel, apiKey]);
+  }, [messages, currentChatId, setChatsData, selectedModel, apiKey, regenerateResponse]);
 
   return {
     messages,
