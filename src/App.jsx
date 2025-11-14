@@ -15,6 +15,7 @@ import {
 import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index';
 
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
+import { InitialSetupScreen } from './components/setup/InitialSetupScreen.jsx';
 
 import { useOpenCodeChat } from './hooks/useOpenCodeChat.js';
 import {
@@ -114,7 +115,7 @@ const CHAIN_OF_THOUGHT_STATUSES = {
 
 
 
-export default function App() {
+function AppContent() {
   const [apiKey, setApiKey, isApiKeyLoading] = useStorage('apiKey', '');
   const [googleApiKey, setGoogleApiKey, isGoogleApiKeyLoading] = useStorage('googleApiKey', '');
   const [braveSearchApiKey, setBraveSearchApiKey, isBraveSearchApiKeyLoading] = useStorage('braveSearchApiKey', '');
@@ -181,6 +182,13 @@ export default function App() {
     anthropicApiKey: anthropicKeyInput,
     openaiApiKey: openaiKeyInput,
   } = inputs;
+
+  const hasAnyProviderKey =
+    Boolean(apiKey) ||
+    Boolean(googleApiKey) ||
+    Boolean(openRouterApiKey) ||
+    Boolean(anthropicApiKey) ||
+    Boolean(openaiApiKey);
 
   useProviderRegistrations({
     braveSearchApiKey,
@@ -741,102 +749,35 @@ export default function App() {
     isInitialDataLoading
   ) {
     return (
-      <div className="flex h-screen bg-background items-center justify-center">
+      <div className="flex min-h-screen w-full items-center justify-center bg-sidebar text-sidebar-foreground">
+        <div className="rounded-2xl border border-sidebar-border/60 bg-card px-6 py-5 text-sm text-muted-foreground">
+          Loading your sidebar configuration…
+        </div>
       </div>
     );
   }
 
-  if (!apiKey) {
+  if (!hasAnyProviderKey) {
     return (
-      <div className="flex flex-col h-screen p-4 bg-gray-100">
-        <h1 className="text-lg font-bold mb-4">AI Sidebar Setup</h1>
-        <p className="mb-4">Enter your OpenCode Zen API key:</p>
-        <input
-          value={keyInput}
-          onChange={handleSetupInputChange('apiKey')}
-          className="border p-2 mb-4"
-          placeholder="API Key"
-          type="password"
-        />
-        <p className="mb-2 text-sm text-muted-foreground">
-          Optional: add a Google Gemini API key to unlock Gemini models.
-        </p>
-        <input
-          value={googleKeyInput}
-          onChange={handleSetupInputChange('googleApiKey')}
-          className="border p-2 mb-4"
-          placeholder="Gemini API Key (optional)"
-          type="password"
-        />
-        <p className="mb-2 text-sm text-muted-foreground">
-          Optional: add an Anthropic API key to use Claude models.
-        </p>
-        <input
-          value={anthropicKeyInput}
-          onChange={handleSetupInputChange('anthropicApiKey')}
-          className="border p-2 mb-4"
-          placeholder="Anthropic API Key (optional)"
-          type="password"
-        />
-        <p className="mb-2 text-sm text-muted-foreground">
-          Optional: add an OpenAI API key to use OpenAI models directly.
-        </p>
-        <input
-          value={openaiKeyInput}
-          onChange={handleSetupInputChange('openaiApiKey')}
-          className="border p-2 mb-4"
-          placeholder="OpenAI API Key (optional)"
-          type="password"
-        />
-        <p className="mb-2 text-sm text-muted-foreground">
-          Optional: add an OpenRouter API key to access OpenRouter-hosted models.
-        </p>
-        <input
-          value={openRouterKeyInput}
-          onChange={handleSetupInputChange('openRouterApiKey')}
-          className="border p-2 mb-4"
-          placeholder="OpenRouter API Key (optional)"
-          type="password"
-        />
-        <p className="mb-2 text-sm text-muted-foreground">
-          Optional: add a Brave Search API key to enable the Brave Search tool.
-        </p>
-        <input
-          value={braveKeyInput}
-          onChange={handleSetupInputChange('braveSearchApiKey')}
-          className="border p-2 mb-4"
-          placeholder="Brave Search API Key (optional)"
-          type="password"
-        />
-        <p className="mb-2 text-sm text-muted-foreground">
-          Optional: add a Context7 API key to enable pulling contextual docs via Context7.
-        </p>
-        <input
-          value={context7KeyInput}
-          onChange={handleSetupInputChange('context7ApiKey')}
-          className="border p-2 mb-4"
-          placeholder="Context7 API Key (optional)"
-          type="password"
-        />
-        <button onClick={saveSettings} className="bg-blue-500 text-white px-4 py-2 rounded">
-          Save & Start
-        </button>
-      </div>
+      <InitialSetupScreen
+        inputs={inputs}
+        onInputChange={handleSetupInputChange}
+        onSave={saveSettings}
+      />
     );
   }
 
   return (
-    <ThemeProvider>
-      <SidebarProvider>
-        <AppSidebar
-          chats={chats}
-          currentChatId={currentChatId}
+    <SidebarProvider>
+      <AppSidebar
+        chats={chats}
+        currentChatId={currentChatId}
         onNewChat={createNewChat}
         onSelectChat={switchChat}
         onDeleteChat={deleteChatById}
       />
-        <SidebarInset className="h-screen flex flex-col">
-          <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+      <SidebarInset className="h-screen flex flex-col">
+        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
             <div className="flex items-center justify-between px-4 w-full">
               <div className="flex items-center gap-2">
                 <SidebarTrigger className="-ml-1" />
@@ -880,147 +821,143 @@ export default function App() {
                 />
               </div>
             </div>
-          </header>
-            <div className="flex-1 flex flex-col overflow-hidden">
-               {/* Conversation area - takes remaining space */}
-               <div className="flex-1 overflow-hidden">
-                 <Conversation className="h-full">
-                   <ConversationContent className="p-4">
-                     {currentChatMessages.length === 0 ? (
-                       <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
-                         <div className="space-y-1">
-                           <h3 className="font-medium text-sm">No messages yet</h3>
-                           <p className="text-muted-foreground text-sm">Start a conversation to see messages here</p>
-                         </div>
-                       </div>
-                     ) : (
-                       currentChatMessages.map((msg, i) => {
-                         return (
-                           <Branch key={`${currentChatId}-${i}`}>
-                             <BranchMessages>
-                                  <Message from={msg.role}>
-                                    <MessageContent variant="flat">
-                                      {renderMessageParts(msg)}
-                                    </MessageContent>
-                                 </Message>
-                             </BranchMessages>
-                           </Branch>
-                         );
-                       })
-                     )}
-                   </ConversationContent>
-                   <ConversationScrollButton />
-                 </Conversation>
-               </div>
+        </header>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            <Conversation className="h-full">
+              <ConversationContent className="p-4">
+                {currentChatMessages.length === 0 ? (
+                  <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
+                    <div className="space-y-1">
+                      <h3 className="font-medium text-sm">No messages yet</h3>
+                      <p className="text-muted-foreground text-sm">
+                        Start a conversation to see messages here
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  currentChatMessages.map((msg, i) => (
+                    <Branch key={`${currentChatId}-${i}`}>
+                      <BranchMessages>
+                        <Message from={msg.role}>
+                          <MessageContent variant="flat">
+                            {renderMessageParts(msg)}
+                          </MessageContent>
+                        </Message>
+                      </BranchMessages>
+                    </Branch>
+                  ))
+                )}
+              </ConversationContent>
+              <ConversationScrollButton />
+            </Conversation>
+          </div>
 
-               {/* Error display */}
-               {chat.error && (
-                 <div className="border-t bg-destructive/10 p-4">
-                   <div className="flex items-center justify-between gap-4">
-                     <div className="flex items-center gap-2">
-                       <div className="size-4 rounded-full bg-destructive"></div>
-                       <span className="text-sm text-destructive font-medium">
-                         Error: {chat.error?.error || chat.error?.message || 'Something went wrong'}
-                       </span>
-                     </div>
-                     <div className="flex items-center gap-2">
-                       <button
-                         type="button"
-                         onClick={() => chat.reload()}
-                         className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3"
-                       >
-                         Retry
-                       </button>
-                       <button
-                         type="button"
-                         onClick={() => chat.clearError()}
-                         className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-8 px-3"
-                       >
-                         Dismiss
-                       </button>
-                       <button
-                         type="button"
-                         onClick={() => chat.resetChatState()}
-                         className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-muted text-muted-foreground hover:bg-muted/80 h-8 px-3"
-                       >
-                         Reset Chat
-                       </button>
-                     </div>
-                   </div>
-                 </div>
-               )}
-
-               {/* Prompt input - fixed at bottom */}
-                <div className="border-t bg-background p-4">
-                   <PromptInput onSubmit={handleSend} accept="image/*" multiple globalDrop>
-                     <PromptInputBody>
-                        {attachedContextSnippets.length > 0 && (
-                          <div className="mb-2 flex flex-wrap gap-2">
-                            {attachedContextSnippets.map((snippet) => {
-                              const displayText =
-                                snippet.text.length > 120
-                                  ? `${snippet.text.slice(0, 120)}…`
-                                  : snippet.text;
-                              return (
-                                <div
-                                  key={snippet.id}
-                                  className="flex items-center gap-1 rounded-full border border-border bg-muted/30 px-3 py-1 text-xs text-foreground"
-                                >
-                                  <span className="max-w-[240px] truncate">{displayText}</span>
-                                  <button
-                                    type="button"
-                                    className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                                    aria-label="Remove attached context"
-                                    onClick={() => removeContextSnippet(snippet.id)}
-                                  >
-                                    <X className="size-3" />
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                        <PromptInputAttachments>
-                         {(attachment) => (
-                           <PromptInputAttachment data={attachment} />
-                         )}
-                       </PromptInputAttachments>
-                       <PromptInputTextarea
-          inputRef={inputRef}
-          disabled={chat.status === 'error'}
-        />
-                     </PromptInputBody>
-                    <PromptInputFooter>
-                      <PromptInputTools>
-                        <PromptInputActionMenu>
-                          <PromptInputActionMenuTrigger />
-                          <PromptInputActionMenuContent>
-                            <PromptInputActionAddAttachments />
-                          </PromptInputActionMenuContent>
-                        </PromptInputActionMenu>
-                        <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
-                          <PromptInputModelSelectTrigger>
-                            <PromptInputModelSelectValue />
-                          </PromptInputModelSelectTrigger>
-                          <PromptInputModelSelectContent>
-                            {modelOptions.map((model) => (
-                              <PromptInputModelSelectItem
-                                key={model.id}
-                                value={model.id}
-                              >
-                                {model.name}
-                              </PromptInputModelSelectItem>
-                            ))}
-                          </PromptInputModelSelectContent>
-                        </PromptInputModelSelect>
-                      </PromptInputTools>
-                       <PromptInputSubmit status={currentChatStatus} onStop={stopGeneration} />
-                    </PromptInputFooter>
-                  </PromptInput>
+          {chat.error && (
+            <div className="border-t bg-destructive/10 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="size-4 rounded-full bg-destructive"></div>
+                  <span className="text-sm text-destructive font-medium">
+                    Error: {chat.error?.error || chat.error?.message || 'Something went wrong'}
+                  </span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => chat.reload()}
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3"
+                  >
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => chat.clearError()}
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-8 px-3"
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => chat.resetChatState()}
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-muted text-muted-foreground hover:bg-muted/80 h-8 px-3"
+                  >
+                    Reset Chat
+                  </button>
+                </div>
+              </div>
             </div>
-           </SidebarInset>
-      </SidebarProvider>
+          )}
+
+          <div className="border-t bg-background p-4">
+            <PromptInput onSubmit={handleSend} accept="image/*" multiple globalDrop>
+              <PromptInputBody>
+                {attachedContextSnippets.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {attachedContextSnippets.map((snippet) => {
+                      const displayText =
+                        snippet.text.length > 120
+                          ? `${snippet.text.slice(0, 120)}…`
+                          : snippet.text;
+                      return (
+                        <div
+                          key={snippet.id}
+                          className="flex items-center gap-1 rounded-full border border-border bg-muted/30 px-3 py-1 text-xs text-foreground"
+                        >
+                          <span className="max-w-[240px] truncate">{displayText}</span>
+                          <button
+                            type="button"
+                            className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                            aria-label="Remove attached context"
+                            onClick={() => removeContextSnippet(snippet.id)}
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <PromptInputAttachments>
+                  {(attachment) => <PromptInputAttachment data={attachment} />}
+                </PromptInputAttachments>
+                <PromptInputTextarea inputRef={inputRef} disabled={chat.status === 'error'} />
+              </PromptInputBody>
+              <PromptInputFooter>
+                <PromptInputTools>
+                  <PromptInputActionMenu>
+                    <PromptInputActionMenuTrigger />
+                    <PromptInputActionMenuContent>
+                      <PromptInputActionAddAttachments />
+                    </PromptInputActionMenuContent>
+                  </PromptInputActionMenu>
+                  <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
+                    <PromptInputModelSelectTrigger>
+                      <PromptInputModelSelectValue />
+                    </PromptInputModelSelectTrigger>
+                    <PromptInputModelSelectContent>
+                      {modelOptions.map((model) => (
+                        <PromptInputModelSelectItem key={model.id} value={model.id}>
+                          {model.name}
+                        </PromptInputModelSelectItem>
+                      ))}
+                    </PromptInputModelSelectContent>
+                  </PromptInputModelSelect>
+                </PromptInputTools>
+                <PromptInputSubmit status={currentChatStatus} onStop={stopGeneration} />
+              </PromptInputFooter>
+            </PromptInput>
+          </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
     </ThemeProvider>
   );
 }
