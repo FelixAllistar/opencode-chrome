@@ -4,12 +4,14 @@ import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Settings as SettingsIcon } from 'lucide-react';
+import { ChevronDown, Settings as SettingsIcon } from 'lucide-react';
 import { ThemeSwitcher } from './ThemeSwitcher.jsx';
 import { Button } from '../ui/button.jsx';
 import { Switch } from '../ui/switch.tsx';
+import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form.tsx';
 import { ApiKeysSection } from './ApiKeysSection.jsx';
 import { TOOL_DEFINITIONS } from '../../services/ai/tools/index';
+import { PROVIDER_TYPES } from '../../utils/constants.js';
 
 const settingsSchema = z.object({
   openCodeApiKey: z.string(),
@@ -17,6 +19,15 @@ const settingsSchema = z.object({
   braveSearchApiKey: z.string(),
   context7ApiKey: z.string(),
   openRouterApiKey: z.string(),
+  anthropicApiKey: z.string(),
+});
+
+const modelSchema = z.object({
+  id: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  type: z.enum(PROVIDER_TYPES),
+  isVision: z.boolean(),
+  supportsTools: z.boolean()
 });
 
 export const SettingsMenu = ({
@@ -25,10 +36,17 @@ export const SettingsMenu = ({
   braveSearchApiKey = '',
   context7ApiKey = '',
   openRouterApiKey = '',
+  anthropicApiKey = '',
+  openaiApiKey = '',
   enabledTools = [],
   onSaveKeys,
   onClear,
-  onToggleTool
+  onToggleTool,
+  models = [],
+  enabledModelIds = [],
+  onToggleModel,
+  onAddCustomModel,
+  providerTypes = PROVIDER_TYPES
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -36,6 +54,9 @@ export const SettingsMenu = ({
   const [lastSavedField, setLastSavedField] = useState(null);
   const savedTimerRef = useRef(null);
   const menuRef = useRef(null);
+  const [isModelsExpanded, setIsModelsExpanded] = useState(false);
+  const [modelMessage, setModelMessage] = useState('');
+  const modelSavedTimerRef = useRef(null);
 
   const form = useForm({
     resolver: zodResolver(settingsSchema),
@@ -44,7 +65,21 @@ export const SettingsMenu = ({
       googleApiKey,
       braveSearchApiKey,
       context7ApiKey,
-      openRouterApiKey
+      openRouterApiKey,
+      anthropicApiKey,
+      openaiApiKey
+    }
+  });
+
+  const availableProviders = providerTypes.length > 0 ? providerTypes : PROVIDER_TYPES;
+  const modelForm = useForm({
+    resolver: zodResolver(modelSchema),
+    defaultValues: {
+      id: '',
+      name: '',
+      type: availableProviders[0],
+      isVision: true,
+      supportsTools: true
     }
   });
 
@@ -54,9 +89,11 @@ export const SettingsMenu = ({
       googleApiKey,
       braveSearchApiKey,
       context7ApiKey,
-      openRouterApiKey
+      openRouterApiKey,
+      anthropicApiKey,
+      openaiApiKey
     });
-  }, [apiKey, googleApiKey, braveSearchApiKey, context7ApiKey, openRouterApiKey, form]);
+  }, [apiKey, googleApiKey, braveSearchApiKey, context7ApiKey, openRouterApiKey, anthropicApiKey, openaiApiKey, form]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -74,6 +111,9 @@ export const SettingsMenu = ({
       if (savedTimerRef.current) {
         clearTimeout(savedTimerRef.current);
       }
+      if (modelSavedTimerRef.current) {
+        clearTimeout(modelSavedTimerRef.current);
+      }
     };
   }, []);
 
@@ -83,7 +123,9 @@ export const SettingsMenu = ({
       values.googleApiKey,
       values.braveSearchApiKey,
       values.context7ApiKey,
-      values.openRouterApiKey
+      values.openRouterApiKey,
+      values.anthropicApiKey,
+      values.openaiApiKey
     );
 
     setIsSaved(true);
@@ -105,11 +147,33 @@ export const SettingsMenu = ({
       googleApiKey: '',
       braveSearchApiKey: '',
       context7ApiKey: '',
-      openRouterApiKey: ''
+      openRouterApiKey: '',
+      anthropicApiKey: '',
+      openaiApiKey: ''
     });
     setIsOpen(false);
     setIsSaved(false);
     setLastSavedField(null);
+  };
+
+  const handleAddModel = (values) => {
+    onAddCustomModel?.({
+      ...values,
+      id: values.id.trim(),
+      name: values.name.trim()
+    });
+    setModelMessage('Model added');
+    if (modelSavedTimerRef.current) {
+      clearTimeout(modelSavedTimerRef.current);
+    }
+    modelSavedTimerRef.current = setTimeout(() => {
+      setModelMessage('');
+    }, 2000);
+    modelForm.reset({
+      ...modelForm.getValues(),
+      id: '',
+      name: ''
+    });
   };
 
   return (
@@ -159,6 +223,142 @@ export const SettingsMenu = ({
                   );
                 })}
               </div>
+            </div>
+            <div className="border-t pt-2 space-y-2">
+              <button
+                type="button"
+                onClick={() => setIsModelsExpanded((prev) => !prev)}
+                aria-expanded={isModelsExpanded}
+                className="flex w-full items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground"
+              >
+                <span>Models</span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${isModelsExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {isModelsExpanded && (
+                <>
+                  <div className="space-y-2 px-2">
+                    {models.map((model) => {
+                      const isChecked = enabledModelIds.includes(model.id);
+                      const capabilityLabel = `${model.type} · ${model.isVision ? 'vision' : 'text'} · ${model.supportsTools ? 'tools' : 'no tools'}`;
+                      return (
+                        <div key={model.id} className="flex items-center justify-between">
+                          <div className="pr-2">
+                            <p className="text-sm font-medium">{model.name}</p>
+                            <p className="text-[10px] text-muted-foreground">{capabilityLabel}</p>
+                          </div>
+                          <Switch
+                            checked={isChecked}
+                            onCheckedChange={(value) => onToggleModel?.(model.id, Boolean(value))}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="border-t pt-2">
+                    <Form {...modelForm}>
+                      <form className="space-y-2 px-2 py-1" onSubmit={modelForm.handleSubmit(handleAddModel)}>
+                        <FormField
+                          control={modelForm.control}
+                          name="id"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs text-muted-foreground">Model ID</FormLabel>
+                              <FormControl>
+                                <input
+                                  {...field}
+                                  type="text"
+                                  className="w-full border px-2 py-1 text-xs rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={modelForm.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs text-muted-foreground">Model Name</FormLabel>
+                              <FormControl>
+                                <input
+                                  {...field}
+                                  type="text"
+                                  className="w-full border px-2 py-1 text-xs rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={modelForm.control}
+                          name="type"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs text-muted-foreground">Provider</FormLabel>
+                              <FormControl>
+                                <select
+                                  {...field}
+                                  className="w-full border px-2 py-1 text-xs rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                >
+                                  {availableProviders.map((provider) => (
+                                    <option key={provider} value={provider}>
+                                      {provider}
+                                    </option>
+                                  ))}
+                                </select>
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={modelForm.control}
+                          name="isVision"
+                          render={({ field }) => (
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-medium">Vision enabled</p>
+                                <p className="text-[10px] text-muted-foreground">Send inline images/files</p>
+                              </div>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={(value) => field.onChange(Boolean(value))}
+                              />
+                            </div>
+                          )}
+                        />
+                        <FormField
+                          control={modelForm.control}
+                          name="supportsTools"
+                          render={({ field }) => (
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-medium">Tool support</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  Allow tool loops for this model
+                                </p>
+                              </div>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={(value) => field.onChange(Boolean(value))}
+                              />
+                            </div>
+                          )}
+                        />
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] text-muted-foreground">
+                            {modelMessage || 'IDs must match the provider API string and appear in the dropdown.'}
+                          </p>
+                          <Button size="sm" type="submit">
+                            Add model
+                          </Button>
+                        </div>
+                      </form>
+                    </Form>
+                  </div>
+                </>
+              )}
             </div>
             <button
               type="button"

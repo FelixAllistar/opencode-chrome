@@ -6,6 +6,8 @@ const EMPTY_VALUES = {
   braveSearchApiKey: '',
   context7ApiKey: '',
   openRouterApiKey: '',
+  anthropicApiKey: '',
+  openaiApiKey: '',
 };
 
 export function useApiKeyInputs({
@@ -14,6 +16,8 @@ export function useApiKeyInputs({
   braveSearchApiKey = '',
   context7ApiKey = '',
   openRouterApiKey = '',
+  anthropicApiKey = '',
+  openaiApiKey = '',
 }) {
   const [inputs, setInputs] = useState({
     ...EMPTY_VALUES,
@@ -22,6 +26,8 @@ export function useApiKeyInputs({
     braveSearchApiKey,
     context7ApiKey,
     openRouterApiKey,
+    anthropicApiKey,
+    openaiApiKey,
   });
 
   useEffect(() => {
@@ -31,6 +37,8 @@ export function useApiKeyInputs({
       braveSearchApiKey,
       context7ApiKey,
       openRouterApiKey,
+      anthropicApiKey,
+      openaiApiKey,
     };
 
     setInputs((previous) => {
@@ -40,7 +48,15 @@ export function useApiKeyInputs({
 
       return hasChanges ? { ...previous, ...normalizedValues } : previous;
     });
-  }, [apiKey, googleApiKey, braveSearchApiKey, context7ApiKey, openRouterApiKey]);
+  }, [
+    apiKey,
+    googleApiKey,
+    braveSearchApiKey,
+    context7ApiKey,
+    openRouterApiKey,
+    anthropicApiKey,
+    openaiApiKey,
+  ]);
 
   const updateInput = useCallback((key, value) => {
     setInputs((previous) => {
@@ -78,8 +94,18 @@ export function useApiKeyInputs({
       braveSearchApiKey,
       context7ApiKey,
       openRouterApiKey,
+      anthropicApiKey,
+      openaiApiKey,
     });
-  }, [apiKey, googleApiKey, braveSearchApiKey, context7ApiKey, openRouterApiKey]);
+  }, [
+    apiKey,
+    googleApiKey,
+    braveSearchApiKey,
+    context7ApiKey,
+    openRouterApiKey,
+    anthropicApiKey,
+    openaiApiKey,
+  ]);
 
   return {
     inputs,

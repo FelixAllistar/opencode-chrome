@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo } from 'react';
 import { Plus, BrainIcon, SearchIcon, X } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { useApiKeyInputs } from './hooks/useApiKeyInputs.js';
@@ -6,7 +6,12 @@ import { useProviderRegistrations } from './hooks/useProviderRegistrations.js';
 import { useUnhandledRejectionHandler } from './hooks/useUnhandledRejectionHandler.js';
 import { useChatBootstrap } from './hooks/useChatBootstrap.js';
 import { useConversationLifecycle } from './hooks/useConversationLifecycle.js';
-import { MODELS } from './utils/constants.js';
+import {
+  MODELS,
+  PROVIDER_TYPES,
+  DEFAULT_MODEL_PREFERENCES,
+  DEFAULT_ENABLED_MODEL_IDS,
+} from './utils/constants.js';
 import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index';
 
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
@@ -115,8 +120,36 @@ export default function App() {
   const [braveSearchApiKey, setBraveSearchApiKey, isBraveSearchApiKeyLoading] = useStorage('braveSearchApiKey', '');
   const [context7ApiKey, setContext7ApiKeyStorage, isContext7ApiKeyLoading] = useStorage('context7ApiKey', '');
   const [openRouterApiKey, setOpenRouterApiKey, isOpenRouterApiKeyLoading] = useStorage('openRouterApiKey', '');
+  const [anthropicApiKey, setAnthropicApiKey, isAnthropicApiKeyLoading] = useStorage('anthropicApiKey', '');
+  const [openaiApiKey, setOpenaiApiKey, isOpenaiApiKeyLoading] = useStorage('openaiApiKey', '');
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
-  const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
+  const [modelPreferences, setModelPreferences] = useStorage('modelPreferences', DEFAULT_MODEL_PREFERENCES);
+  const customModels = modelPreferences?.customModels ?? [];
+  const availableModels = useMemo(() => [...MODELS, ...customModels], [customModels]);
+  const enabledModelIds = Array.isArray(modelPreferences?.enabledModelIds)
+    ? modelPreferences.enabledModelIds
+    : DEFAULT_ENABLED_MODEL_IDS;
+  const enabledModels = useMemo(
+    () => availableModels.filter((model) => enabledModelIds.includes(model.id)),
+    [availableModels, enabledModelIds]
+  );
+  const selectedModel =
+    enabledModels.find((model) => model.id === selectedModelId) ??
+    enabledModels[0] ??
+    availableModels[0] ??
+    MODELS[0];
+
+  const modelOptions = enabledModels.length > 0 ? enabledModels : availableModels;
+
+  useEffect(() => {
+    if (enabledModels.length === 0) {
+      return;
+    }
+
+    if (!enabledModels.some((model) => model.id === selectedModelId)) {
+      setSelectedModelId(enabledModels[0].id);
+    }
+  }, [enabledModels, selectedModelId, setSelectedModelId]);
   const [enabledToolIds, setEnabledToolIds] = useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS);
   const inputRef = useRef(null);
   const {
@@ -136,6 +169,8 @@ export default function App() {
     braveSearchApiKey,
     context7ApiKey,
     openRouterApiKey,
+    anthropicApiKey,
+    openaiApiKey,
   });
   const {
     apiKey: keyInput,
@@ -143,6 +178,8 @@ export default function App() {
     braveSearchApiKey: braveKeyInput,
     context7ApiKey: context7KeyInput,
     openRouterApiKey: openRouterKeyInput,
+    anthropicApiKey: anthropicKeyInput,
+    openaiApiKey: openaiKeyInput,
   } = inputs;
 
   useProviderRegistrations({
@@ -253,6 +290,8 @@ export default function App() {
     apiKey,
     googleApiKey,
     openRouterApiKey,
+    anthropicApiKey,
+    openaiApiKey,
     selectedModel,
     enabledToolIds,
     onError: (errorForUI) => {
@@ -290,6 +329,8 @@ export default function App() {
     setBraveSearchApiKey(braveKeyInput);
     setContext7ApiKeyStorage(context7KeyInput);
     setOpenRouterApiKey(openRouterKeyInput);
+    setAnthropicApiKey(anthropicKeyInput);
+    setOpenaiApiKey(openaiKeyInput);
     setSelectedModelId(selectedModel.id);
   };
 
@@ -298,13 +339,17 @@ export default function App() {
     newGoogleApiKey,
     newBraveSearchApiKey,
     newContext7ApiKey,
-    newOpenRouterApiKey
+    newOpenRouterApiKey,
+    newAnthropicApiKey,
+    newOpenaiApiKey
   ) => {
     setApiKey(newApiKey);
     setGoogleApiKey(newGoogleApiKey);
     setBraveSearchApiKey(newBraveSearchApiKey);
     setContext7ApiKeyStorage(newContext7ApiKey);
     setOpenRouterApiKey(newOpenRouterApiKey);
+    setAnthropicApiKey(newAnthropicApiKey);
+    setOpenaiApiKey(newOpenaiApiKey);
   };
 
   const handleSetupInputChange = useCallback(
@@ -315,11 +360,64 @@ export default function App() {
   );
 
   const changeModel = (modelId) => {
-    const model = MODELS.find(m => m.id === modelId);
-    if (model) {
+    if (enabledModels.some((model) => model.id === modelId)) {
       setSelectedModelId(modelId);
     }
   };
+
+  const toggleModelAvailability = useCallback(
+    (modelId, enabled) => {
+      setModelPreferences((prev = DEFAULT_MODEL_PREFERENCES) => {
+        const prevEnabled = Array.isArray(prev.enabledModelIds)
+          ? prev.enabledModelIds
+          : DEFAULT_ENABLED_MODEL_IDS;
+        const nextEnabled = enabled
+          ? Array.from(new Set([...prevEnabled, modelId]))
+          : prevEnabled.filter((id) => id !== modelId);
+
+        return {
+          ...prev,
+          enabledModelIds: nextEnabled
+        };
+      });
+    },
+    [setModelPreferences]
+  );
+
+  const addCustomModel = useCallback(
+    (modelDefinition) => {
+      if (!modelDefinition?.id) {
+        return;
+      }
+
+      const newModel = {
+        ...modelDefinition,
+        id: modelDefinition.id.trim(),
+        name: modelDefinition.name.trim()
+      };
+
+      if (!newModel.id || !newModel.name) {
+        return;
+      }
+
+      setModelPreferences((prev = DEFAULT_MODEL_PREFERENCES) => {
+        const prevCustoms = prev.customModels ?? [];
+        const withoutDuplicate = prevCustoms.filter((model) => model.id !== newModel.id);
+        const updatedCustoms = [...withoutDuplicate, newModel];
+        const prevEnabled = Array.isArray(prev.enabledModelIds)
+          ? prev.enabledModelIds
+          : DEFAULT_ENABLED_MODEL_IDS;
+        const nextEnabled = Array.from(new Set([...prevEnabled, newModel.id]));
+
+        return {
+          ...prev,
+          customModels: updatedCustoms,
+          enabledModelIds: nextEnabled
+        };
+      });
+    },
+    [setModelPreferences]
+  );
 
   const clearSettings = () => {
     chrome.storage.sync.clear();
@@ -329,14 +427,24 @@ export default function App() {
     setBraveSearchApiKey('');
     setContext7ApiKeyStorage('');
     setOpenRouterApiKey('');
+    setAnthropicApiKey('');
+    setOpenaiApiKey('');
     setKeyInputsState({
       apiKey: '',
       googleApiKey: '',
       braveSearchApiKey: '',
       context7ApiKey: '',
       openRouterApiKey: '',
+      anthropicApiKey: '',
+      openaiApiKey: '',
     });
-    setSelectedModelId(MODELS[0].id);
+    setSelectedModelId(
+      DEFAULT_MODEL_PREFERENCES.enabledModelIds[0] ?? MODELS[0].id
+    );
+    setModelPreferences({
+      enabledModelIds: [...DEFAULT_MODEL_PREFERENCES.enabledModelIds],
+      customModels: []
+    });
     setChatsData({});
     setCurrentChatIdState(null);
   };
@@ -628,6 +736,7 @@ export default function App() {
     isBraveSearchApiKeyLoading ||
     isContext7ApiKeyLoading ||
     isOpenRouterApiKeyLoading ||
+    isAnthropicApiKeyLoading ||
     isModelLoading ||
     isInitialDataLoading
   ) {
@@ -657,6 +766,26 @@ export default function App() {
           onChange={handleSetupInputChange('googleApiKey')}
           className="border p-2 mb-4"
           placeholder="Gemini API Key (optional)"
+          type="password"
+        />
+        <p className="mb-2 text-sm text-muted-foreground">
+          Optional: add an Anthropic API key to use Claude models.
+        </p>
+        <input
+          value={anthropicKeyInput}
+          onChange={handleSetupInputChange('anthropicApiKey')}
+          className="border p-2 mb-4"
+          placeholder="Anthropic API Key (optional)"
+          type="password"
+        />
+        <p className="mb-2 text-sm text-muted-foreground">
+          Optional: add an OpenAI API key to use OpenAI models directly.
+        </p>
+        <input
+          value={openaiKeyInput}
+          onChange={handleSetupInputChange('openaiApiKey')}
+          className="border p-2 mb-4"
+          placeholder="OpenAI API Key (optional)"
           type="password"
         />
         <p className="mb-2 text-sm text-muted-foreground">
@@ -737,10 +866,17 @@ export default function App() {
                   braveSearchApiKey={braveSearchApiKey}
                   context7ApiKey={context7ApiKey}
                   openRouterApiKey={openRouterApiKey}
+                  anthropicApiKey={anthropicApiKey}
+                  openaiApiKey={openaiApiKey}
                   onSaveKeys={handleSaveKeys}
                   onClear={clearSettings}
                   enabledTools={enabledToolIds ?? DEFAULT_ENABLED_TOOL_IDS}
                   onToggleTool={handleToggleTool}
+                  models={availableModels}
+                  enabledModelIds={enabledModelIds}
+                  onToggleModel={toggleModelAvailability}
+                  onAddCustomModel={addCustomModel}
+                  providerTypes={PROVIDER_TYPES}
                 />
               </div>
             </div>
@@ -867,7 +1003,7 @@ export default function App() {
                             <PromptInputModelSelectValue />
                           </PromptInputModelSelectTrigger>
                           <PromptInputModelSelectContent>
-                            {MODELS.map((model) => (
+                            {modelOptions.map((model) => (
                               <PromptInputModelSelectItem
                                 key={model.id}
                                 value={model.id}

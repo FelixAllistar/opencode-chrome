@@ -76,6 +76,40 @@ export const ApiKeysSection = ({
             />
             <FormField
               control={form.control}
+              name="openaiApiKey"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-muted-foreground">OpenAI API Key</FormLabel>
+                  <FormControl>
+                    <input
+                      {...field}
+                      type="password"
+                      className={getInputClass('openaiApiKey')}
+                      onFocus={() => setActiveField('openaiApiKey')}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="anthropicApiKey"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-muted-foreground">Anthropic API Key</FormLabel>
+                  <FormControl>
+                    <input
+                      {...field}
+                      type="password"
+                      className={getInputClass('anthropicApiKey')}
+                      onFocus={() => setActiveField('anthropicApiKey')}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
               name="openRouterApiKey"
               render={({ field }) => (
                 <FormItem>

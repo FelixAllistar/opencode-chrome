@@ -105,6 +105,8 @@ export function useOpenCodeChat({
   apiKey,
   googleApiKey,
   openRouterApiKey,
+  anthropicApiKey,
+  openaiApiKey,
   selectedModel,
   enabledToolIds,
   onError
@@ -117,27 +119,39 @@ export function useOpenCodeChat({
 
   const currentChatData = chatsData[currentChatId];
   const isVisionModel = Boolean(selectedModel?.isVision ?? true);
-  const tools = getTools(enabledToolIds);
+  const supportsTools = Boolean(selectedModel?.supportsTools ?? true);
+  const tools = supportsTools ? getTools(enabledToolIds) : undefined;
+  const modelConversionOptions = supportsTools ? { tools } : undefined;
 
   const requiredApiKey = useMemo(() => {
     if (selectedModel?.type === 'google') {
       return googleApiKey;
     }
 
+    if (selectedModel?.type === 'anthropic') {
+      return anthropicApiKey;
+    }
+
     if (selectedModel?.type === 'openrouter') {
       return openRouterApiKey;
     }
 
+    if (selectedModel?.type === 'openai') {
+      return openaiApiKey;
+    }
+
     return apiKey;
-  }, [selectedModel?.type, googleApiKey, openRouterApiKey, apiKey]);
+  }, [selectedModel?.type, googleApiKey, openRouterApiKey, apiKey, anthropicApiKey, openaiApiKey]);
 
   const providerApiKeys = useMemo(
     () => ({
       openCode: apiKey,
       google: googleApiKey,
-      openRouter: openRouterApiKey
+      openRouter: openRouterApiKey,
+      anthropic: anthropicApiKey,
+      openai: openaiApiKey
     }),
-    [apiKey, googleApiKey, openRouterApiKey]
+    [apiKey, googleApiKey, openRouterApiKey, anthropicApiKey, openaiApiKey]
   );
 
   const prepareMessagesForModel = useCallback(
@@ -284,12 +298,11 @@ export function useOpenCodeChat({
 
       const result = await streamText({
         model: getProvider(selectedModel.id, selectedModel.type, providerApiKeys),
-        messages: convertToModelMessages(modelContext, { tools }),
-        tools,
+        messages: convertToModelMessages(modelContext, modelConversionOptions),
         system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
-        maxToolRoundtrips: 4,
         stopWhen: stepCountIs(20),
         abortSignal: abortControllerRef.current.signal,
+        ...(supportsTools ? { tools, maxToolRoundtrips: 4 } : {}),
         onError: ({ error }) => {
           // Let AI SDK handle the error gracefully
         }
@@ -554,7 +567,7 @@ export function useOpenCodeChat({
     }
 
     // Check if we can send messages (more robust for retry scenarios)
-    if (!requiredApiKey || !currentChatId) return;
+    if (!currentChatId) return;
 
     // If status is not ready, try to clear error and check again
     if (statusRef.current !== 'ready') {
@@ -633,6 +646,43 @@ export function useOpenCodeChat({
     // Track the current messages during streaming
     let currentStreamingMessages = initialMessages;
 
+    if (!requiredApiKey) {
+      const providerLabel = selectedModel?.name || selectedModel?.type || 'selected model';
+      const errMsg = `Missing API key for ${providerLabel}. Please set it in Settings and retry.`;
+      const errorObj = { name: 'MissingApiKey', message: errMsg, error: errMsg };
+
+      const errorMessages = currentStreamingMessages.map((msg) =>
+        msg.id === aiMessageId
+          ? {
+              ...msg,
+              status: 'error',
+              parts: [{ type: 'text', text: errMsg }]
+            }
+          : msg
+      );
+
+      currentStreamingMessages = errorMessages;
+      setMessages(errorMessages);
+      setStatus('error');
+      statusRef.current = 'error';
+      setError(errorObj);
+      setChatsData((prev) => ({
+        ...prev,
+        [currentChatId]: {
+          ...prev[currentChatId],
+          messages: errorMessages,
+          status: 'error'
+        }
+      }));
+
+      if (onError) {
+        onError(errorObj);
+      }
+
+      await saveChatMessages(currentChatId, errorMessages);
+      return;
+    }
+
     try {
       setStatus('streaming');
       statusRef.current = 'streaming'; // Update ref immediately
@@ -649,12 +699,11 @@ export function useOpenCodeChat({
 
       const result = await streamText({
         model: getProvider(selectedModel.id, selectedModel.type, providerApiKeys),
-        messages: convertToModelMessages(messagesForModel, { tools }),
-        tools,
+        messages: convertToModelMessages(messagesForModel, modelConversionOptions),
         system: 'You are a helpful AI assistant. Use tools when they can help answer the user\'s question.',
-        maxToolRoundtrips: 2,
         stopWhen: stepCountIs(10),
         abortSignal: abortControllerRef.current.signal,
+        ...(supportsTools ? { tools, maxToolRoundtrips: 2 } : {}),
         onError: ({ error }) => {
           // Let AI SDK handle the error gracefully - don't throw
           // The error will be processed through the stream
