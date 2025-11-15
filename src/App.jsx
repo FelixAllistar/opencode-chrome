@@ -256,12 +256,6 @@ function AppContent() {
     chat,
     currentChatId,
     createNewChat,
-    selectedModel,
-    apiKey,
-    googleApiKey,
-    openRouterApiKey,
-    anthropicApiKey,
-    openaiApiKey,
     inputRef,
     isInitialDataLoading,
   });

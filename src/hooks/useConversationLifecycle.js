@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { nanoid } from 'nanoid';
 import { useContextSelectionBridge } from './useContextSelectionBridge.js';
-import { getRequiredApiKey } from '@/utils/models.ts';
 
 export function useConversationLifecycle({
   chat,
   currentChatId,
   createNewChat,
-  selectedModel,
-  apiKey,
-  googleApiKey,
-  openRouterApiKey,
-  anthropicApiKey,
-  openaiApiKey,
   inputRef,
   isInitialDataLoading,
 }) {
@@ -43,10 +36,13 @@ export function useConversationLifecycle({
   }, [currentChatId]);
 
   const handleSend = useCallback(async (message) => {
+    if (!currentChatIdRef.current) {
+      await createNewChat();
+    }
+
     const currentChat = chatRef.current;
-    let chatId = currentChatIdRef.current;
-    if (!chatId) {
-      chatId = await createNewChat();
+    if (!currentChat || typeof currentChat.sendMessage !== 'function') {
+      return;
     }
 
     const contexts = attachedContextSnippets
@@ -63,21 +59,7 @@ export function useConversationLifecycle({
     const hasAttachments = Boolean(message.files?.length);
     const hasContext = contexts.length > 0;
 
-    const providerApiKeys = {
-      openCode: apiKey,
-      google: googleApiKey,
-      openRouter: openRouterApiKey,
-      anthropic: anthropicApiKey,
-      openai: openaiApiKey,
-    };
-
-    const requiredKey = getRequiredApiKey(selectedModel, providerApiKeys);
-
-    if (!requiredKey || !(hasText || hasAttachments || hasContext) || currentChat.status === 'error') {
-      return;
-    }
-
-    if (currentChat.status !== 'ready') {
+    if (!(hasText || hasAttachments || hasContext)) {
       return;
     }
 
@@ -92,16 +74,7 @@ export function useConversationLifecycle({
     } catch (error) {
       console.error('Error sending message:', error);
     }
-  }, [
-    apiKey,
-    anthropicApiKey,
-    attachedContextSnippets,
-    createNewChat,
-    googleApiKey,
-    openRouterApiKey,
-    openaiApiKey,
-    selectedModel,
-  ]);
+  }, [attachedContextSnippets, createNewChat]);
 
   const handleSendRef = useRef(handleSend);
   useEffect(() => {
