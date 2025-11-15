@@ -39,13 +39,22 @@ export function useStreamingChat({
   const status = currentChatData?.status || 'ready';
   const isVisionModel = isVisionModelForModel(selectedModel);
   const supportsTools = supportsToolsForModel(selectedModel);
-  const tools = supportsTools
-    ? getTools(enabledToolIds, {
-        getBraveSearchApiKey: () => braveSearchApiKey,
-        getContext7ApiKey: () => context7ApiKey,
-      })
-    : undefined;
-  const modelConversionOptions = supportsTools ? { tools } : undefined;
+  const getBraveSearchApiKey = useCallback(() => braveSearchApiKey, [braveSearchApiKey]);
+  const getContext7ApiKey = useCallback(() => context7ApiKey, [context7ApiKey]);
+  const tools = useMemo(
+    () =>
+      supportsTools
+        ? getTools(enabledToolIds, {
+            getBraveSearchApiKey,
+            getContext7ApiKey,
+          })
+        : undefined,
+    [supportsTools, enabledToolIds, getBraveSearchApiKey, getContext7ApiKey]
+  );
+  const modelConversionOptions = useMemo(
+    () => (supportsTools ? { tools } : undefined),
+    [supportsTools, tools]
+  );
 
   const providerApiKeys = useMemo(
     () => ({
@@ -440,7 +449,21 @@ export function useStreamingChat({
     } finally {
       abortControllerRef.current = null;
     }
-  }, [currentChatId, setChatsData, selectedModel, requiredApiKey, providerApiKeys, onError, testConnectivity, getMissingApiKeyError]);
+  }, [
+    currentChatId,
+    setChatsData,
+    selectedModel,
+    requiredApiKey,
+    providerApiKeys,
+    onError,
+    testConnectivity,
+    getMissingApiKeyError,
+    messages,
+    supportsTools,
+    tools,
+    modelConversionOptions,
+    prepareMessagesForModel,
+  ]);
 
   // Custom sendMessage that integrates with your chat system
   const sendMessage = useCallback(async (message) => {
@@ -844,7 +867,22 @@ export function useStreamingChat({
     } finally {
       abortControllerRef.current = null;
     }
-  }, [currentChatId, messages, requiredApiKey, providerApiKeys, selectedModel, chatsData, setChatsData, onError, testConnectivity, getMissingApiKeyError]);
+  }, [
+    currentChatId,
+    messages,
+    requiredApiKey,
+    providerApiKeys,
+    selectedModel,
+    setChatsData,
+    onError,
+    testConnectivity,
+    getMissingApiKeyError,
+    supportsTools,
+    tools,
+    modelConversionOptions,
+    prepareMessagesForModel,
+    error,
+  ]);
 
   // Stop generation
   const stop = useCallback(() => {
