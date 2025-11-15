@@ -17,7 +17,7 @@ import { ThemeProvider } from './contexts/ThemeProvider.jsx';
 import { ChatStoreProvider, useChatStore } from './contexts/ChatStore.jsx';
 import { InitialSetupScreen } from './components/setup/InitialSetupScreen.jsx';
 
-import { useOpenCodeChat } from './hooks/useOpenCodeChat.js';
+import { useStreamingChat } from './hooks/useStreamingChat.js';
 import {
   createChat,
   loadChatMessages,
@@ -221,25 +221,27 @@ function AppContent() {
     });
   }, [setEnabledToolIds]);
 
-  // Use our custom useOpenCodeChat hook
-  const chat = useOpenCodeChat({
+  // Use our custom streaming chat hook
+  const chat = useStreamingChat({
     currentChatId,
     chatsData,
     setChatsData,
     apiKey,
     googleApiKey,
+    braveSearchApiKey,
+    context7ApiKey,
     openRouterApiKey,
     anthropicApiKey,
     openaiApiKey,
     selectedModel,
     enabledToolIds,
     onError: (errorForUI) => {
-      console.error('Chat error in useOpenCodeChat:', errorForUI);
+      console.error('Chat error in useStreamingChat:', errorForUI);
       // You can add additional error handling here if needed
     }
   });
 
-  // The useOpenCodeChat hook handles updating chatsData internally
+  // The useStreamingChat hook handles updating chatsData internally
 
   // Derived state from chatsData
   const chats = Object.values(chatsData).map(c => c.metadata).sort((a, b) => b.updatedAt - a.updatedAt);

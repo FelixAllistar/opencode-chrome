@@ -25,7 +25,7 @@ The goal is to **preserve behavior** (sidepanel chat, multi-provider support, to
   - `sanitizeMessagePartsForModel(parts, isVisionModel)`
   - `filterMessagesForAPI(messages)` (moved from `errorHandling.ts`)
   - (later) `convertPartsToChainOfThought(parts)` that returns data-only steps
-- [x] P1.3 Update `useOpenCodeChat` to import and use `sanitizeMessagePartsForModel` / `isVisualMessagePart` from `messageTransforms.ts`
+- [x] P1.3 Update `useStreamingChat` to import and use `sanitizeMessagePartsForModel` / `isVisualMessagePart` from `messageTransforms.ts`
 - [ ] P1.4 Update `App.jsx` and error handling to use `filterMessagesForAPI` (and, later, `convertPartsToChainOfThought`) from the shared module
 
 ---
@@ -41,7 +41,7 @@ The goal is to **preserve behavior** (sidepanel chat, multi-provider support, to
   - `supportsTools(model: ModelConfig): boolean`
 - [x] P2.2 Refactor `src/utils/constants.js` to be backed by `ModelConfig` (while keeping the JS API)
 - [x] P2.3 Replace ad‑hoc key checks:
-  - `useOpenCodeChat` (`requiredApiKey`, `providerApiKeys`, `testConnectivity`)
+  - `useStreamingChat` (`requiredApiKey`, `providerApiKeys`, `testConnectivity`)
   - `useConversationLifecycle` (`requiredKey`)
   - `App.jsx` (`hasAnyProviderKey`)
   to all use `getRequiredApiKey` / model helpers
@@ -51,7 +51,7 @@ The goal is to **preserve behavior** (sidepanel chat, multi-provider support, to
 
 ## Phase 3 – Chat Store & Streaming Controller
 
-**Goal:** A single source of truth for chats/messages; `useOpenCodeChat` becomes a streaming controller, not a duplicate store.
+**Goal:** A single source of truth for chats/messages; `useStreamingChat` becomes a streaming controller, not a duplicate store.
 
 - [x] P3.1 Introduce a `ChatStoreProvider` (e.g. `src/contexts/ChatStore.tsx`) that owns:
   - `chatsData`, `currentChatId`
@@ -59,7 +59,7 @@ The goal is to **preserve behavior** (sidepanel chat, multi-provider support, to
   - `updateMessages(chatId, messages)`, `updateStatus(chatId, status)`
   - persistence via `chatStorage.js`
 - [x] P3.2 Refactor `useChatBootstrap` logic into the store and expose a typed `useChatStore` hook
-- [x] P3.3 Refactor `useOpenCodeChat` to:
+- [x] P3.3 Refactor `useStreamingChat` to:
   - accept `currentChatId` + callbacks (`onMessagesChange`, `onStatusChange`)
   - stop owning its own `messages`/`status` state
   - stream into the store instead of calling `setChatsData` directly
@@ -74,7 +74,7 @@ The goal is to **preserve behavior** (sidepanel chat, multi-provider support, to
 - [x] P4.1 Define `ChatError` (discriminated union) and helpers in `src/utils/errorHandling.ts`
   - `createChatError(kind, rawError)`
   - `formatChatError(error: ChatError): string`
-- [x] P4.2 Update `useOpenCodeChat` to set `ChatError | null` only
+- [x] P4.2 Update `useStreamingChat` to set `ChatError | null` only
 - [x] P4.3 Make the banner + message-level error parts derive from `ChatError`
 - [x] P4.4 Ensure `createUnhandledRejectionHandler` reuses the same helpers and shapes
 
@@ -106,7 +106,7 @@ The goal is to **preserve behavior** (sidepanel chat, multi-provider support, to
 
 **Goal:** Gradually strengthen typing around the core without breaking the extension.
 
-- [x] P7.1 Wire the new domain types into `useOpenCodeChat`, `useConversationLifecycle`, and `chatStorage`
-- [ ] P7.2 Convert selected core files (`useOpenCodeChat.js`, `useConversationLifecycle.js`) to TS where practical
+- [x] P7.1 Wire the new domain types into `useStreamingChat`, `useConversationLifecycle`, and `chatStorage`
+- [ ] P7.2 Convert selected core files (`useStreamingChat.js`, `useConversationLifecycle.js`) to TS where practical
 - [ ] P7.3 Add lightweight JSDoc types in JS files that consume the domain types, to keep them in sync
 - [ ] P7.4 Periodically revisit this checklist and close or add items as the architecture stabilizes

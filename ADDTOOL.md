@@ -9,7 +9,7 @@
    - Add it to `TOOL_DEFINITIONS`; `DEFAULT_ENABLED_TOOL_IDS`/`getTools` pick it up automatically.
    - Because `tsc --noEmit` is scoped to `src/services/ai/tools/**/*.ts`, the compiler will fail if you forget to import it.
 3. **Persist enablement**
-   - No additional wiring is needed for storage; `App.jsx` already reads `enabledToolIds` from `useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS)` and feeds them into `useOpenCodeChat`.
+   - No additional wiring is needed for storage; `App.jsx` already reads `enabledToolIds` from `useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS)` and feeds them into `useStreamingChat`.
    - If you want the tool disabled by default, set `defaultEnabled: false`; users can flip it in `SettingsMenu.jsx`.
 4. **Expose in Settings**
    - The settings menu enumerates `TOOL_DEFINITIONS` and renders a `Switch` for each entry (`SettingsMenu.jsx`), so new tools appear automatically without extra changes, and the `enabledTools` list (backed by `useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS)`) keeps each toggle persisted.

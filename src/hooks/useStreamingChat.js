@@ -13,20 +13,22 @@ import {
 import { createChatError } from '@/utils/errorHandling.ts';
 
 /**
- * Custom hook that provides useChat-like functionality with OpenCode Zen integration
+ * Streaming chat controller hook that lives on top of the shared ChatStore.
  */
-export function useOpenCodeChat({
+export function useStreamingChat({
   currentChatId,
   chatsData,
   setChatsData,
   apiKey,
   googleApiKey,
+  braveSearchApiKey,
+  context7ApiKey,
   openRouterApiKey,
   anthropicApiKey,
   openaiApiKey,
   selectedModel,
   enabledToolIds,
-  onError
+  onError,
 }) {
   const [error, setError] = useState(null);
   const abortControllerRef = useRef(null);
