@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { nanoid } from 'nanoid';
 import { useContextSelectionBridge } from './useContextSelectionBridge.js';
+import { getRequiredApiKey } from '@/utils/models.ts';
 
 export function useConversationLifecycle({
   chat,
@@ -10,6 +11,8 @@ export function useConversationLifecycle({
   apiKey,
   googleApiKey,
   openRouterApiKey,
+  anthropicApiKey,
+  openaiApiKey,
   inputRef,
   isInitialDataLoading,
 }) {
@@ -59,11 +62,16 @@ export function useConversationLifecycle({
     const hasText = combinedText.trim().length > 0;
     const hasAttachments = Boolean(message.files?.length);
     const hasContext = contexts.length > 0;
-    const requiredKey = selectedModel?.type === 'google'
-      ? googleApiKey
-      : selectedModel?.type === 'openrouter'
-        ? openRouterApiKey
-        : apiKey;
+
+    const providerApiKeys = {
+      openCode: apiKey,
+      google: googleApiKey,
+      openRouter: openRouterApiKey,
+      anthropic: anthropicApiKey,
+      openai: openaiApiKey,
+    };
+
+    const requiredKey = getRequiredApiKey(selectedModel, providerApiKeys);
 
     if (!requiredKey || !(hasText || hasAttachments || hasContext) || currentChat.status === 'error') {
       return;
@@ -86,10 +94,12 @@ export function useConversationLifecycle({
     }
   }, [
     apiKey,
+    anthropicApiKey,
     attachedContextSnippets,
     createNewChat,
     googleApiKey,
     openRouterApiKey,
+    openaiApiKey,
     selectedModel,
   ]);
 

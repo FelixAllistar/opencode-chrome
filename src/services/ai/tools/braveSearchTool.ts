@@ -2,14 +2,12 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import type { ToolDefinition } from './types';
 
+type BraveSearchRuntimeContext = {
+  getToken: () => string | undefined;
+};
+
 const BRAVE_SEARCH_BASE_URL = 'https://api.search.brave.com/res/v1/web/search';
 const MAX_SECTION_ENTRIES = 6;
-
-let braveSearchSubscriptionToken = '';
-
-export function setBraveSearchSubscriptionToken(token?: string) {
-  braveSearchSubscriptionToken = token?.trim() || '';
-}
 
 type BraveSearchInput = {
   query: string;
@@ -115,7 +113,8 @@ const buildSection = (id: string, label: string, payload: unknown, displayLimit:
   };
 };
 
-const braveSearchToolInstance = tool({
+export const createBraveSearchTool = (ctx: BraveSearchRuntimeContext) =>
+  tool({
   description: 'Run a Brave Web Search query and return structured web/news/mixed results',
   inputSchema: z.object({
     query: z.string().min(1).describe('The search query to send to Brave Search'),
@@ -141,6 +140,7 @@ const braveSearchToolInstance = tool({
     spellcheck,
     safesearch,
   }: BraveSearchInput) => {
+    const braveSearchSubscriptionToken = ctx.getToken()?.trim();
     if (!braveSearchSubscriptionToken) {
       throw new Error('Missing Brave Search API key; please add it via the settings menu.');
     }
@@ -243,6 +243,10 @@ const braveSearchToolInstance = tool({
       rawResponse: payload,
     };
   },
+  });
+
+const defaultBraveSearchToolInstance = createBraveSearchTool({
+  getToken: () => '',
 });
 
 export const braveSearchToolDefinition: ToolDefinition = {
@@ -250,5 +254,5 @@ export const braveSearchToolDefinition: ToolDefinition = {
   label: 'Brave Search',
   description: 'Use Brave Search to surface web/news/mixed results with optional summary',
   defaultEnabled: false,
-  tool: braveSearchToolInstance,
+  tool: defaultBraveSearchToolInstance,
 };

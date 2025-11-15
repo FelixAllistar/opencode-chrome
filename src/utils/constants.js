@@ -1,5 +1,10 @@
+// Provider types used across the app; keep in sync with ProviderType in src/types/index.ts.
 export const PROVIDER_TYPES = ['openai', 'anthropic', 'openai-compatible', 'google', 'openrouter'];
 
+/**
+ * Default model catalog.
+ * This array is treated as `ModelConfig[]` (see src/types/index.ts) by the TypeScript helpers.
+ */
 export const MODELS = [
   { id: 'gpt-5', name: 'GPT 5', type: 'openai', isVision: true, supportsTools: true },
   { id: 'gpt-5-codex', name: 'GPT 5 Codex', type: 'openai', isVision: true, supportsTools: true },

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect } from 'react';
 import { THEMES, THEME_VARIABLES, DEFAULT_THEME } from '../utils/themes.js';
 import { useStorage } from '../hooks/useStorage.js';
 
@@ -6,7 +6,8 @@ const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useStorage('theme', DEFAULT_THEME);
-  const [isDark, setIsDark] = useState(true); // For now, default to dark mode
+  const [themeMode, setThemeMode] = useStorage('themeMode', 'dark');
+  const isDark = themeMode !== 'light';
 
   useEffect(() => {
     applyTheme(theme, isDark);
@@ -37,17 +38,19 @@ export function ThemeProvider({ children }) {
   };
 
   const toggleDarkMode = () => {
-    setIsDark(!isDark);
+    setThemeMode(isDark ? 'light' : 'dark');
   };
 
   return (
-    <ThemeContext.Provider value={{
-      theme,
-      isDark,
-      changeTheme,
-      toggleDarkMode,
-      themes: Object.keys(THEMES)
-    }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        isDark,
+        changeTheme,
+        toggleDarkMode,
+        themes: Object.keys(THEMES),
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

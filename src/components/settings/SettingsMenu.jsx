@@ -20,6 +20,7 @@ const settingsSchema = z.object({
   context7ApiKey: z.string(),
   openRouterApiKey: z.string(),
   anthropicApiKey: z.string(),
+  openaiApiKey: z.string(),
 });
 
 const modelSchema = z.object({

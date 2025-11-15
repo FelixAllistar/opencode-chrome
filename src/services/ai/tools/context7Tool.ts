@@ -2,15 +2,13 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import type { ToolDefinition } from './types';
 
+type Context7RuntimeContext = {
+  getApiKey: () => string | undefined;
+};
+
 const CONTEXT7_API_BASE = 'https://context7.com/api/v1';
 const CONTEXT7_SEARCH_ENDPOINT = `${CONTEXT7_API_BASE}/search`;
 const MAX_DOC_PREVIEW = 4000;
-
-let context7ApiKey = '';
-
-export function setContext7ApiKey(token?: string) {
-  context7ApiKey = token?.trim() ?? '';
-}
 
 type Context7SearchResult = {
   id?: string;
@@ -39,7 +37,8 @@ type Context7Output = {
   fetchedAt: string;
 };
 
-const context7ToolInstance = tool({
+export const createContext7Tool = (ctx: Context7RuntimeContext) =>
+  tool({
   description: 'Look up Context7 documentation for libraries or hooks',
   inputSchema: z.object({
     query: z.string().min(1).describe('The search query that describes the library or hook you need'),
@@ -53,6 +52,7 @@ const context7ToolInstance = tool({
       .describe('How much Context7 documentation to request (tokens)'),
   }),
   execute: async ({ query, topic, tokens }: Context7Input): Promise<Context7Output> => {
+    const context7ApiKey = ctx.getApiKey()?.trim() ?? '';
     if (!context7ApiKey) {
       throw new Error('Missing Context7 API key; please add it via the settings menu.');
     }
@@ -132,6 +132,10 @@ const context7ToolInstance = tool({
       fetchedAt: new Date().toISOString(),
     };
   },
+  });
+
+const defaultContext7ToolInstance = createContext7Tool({
+  getApiKey: () => '',
 });
 
 export const context7ToolDefinition: ToolDefinition = {
@@ -139,5 +143,5 @@ export const context7ToolDefinition: ToolDefinition = {
   label: 'Context7 Docs',
   description: 'Look up Context7 documentation snippets for a library or hook',
   defaultEnabled: false,
-  tool: context7ToolInstance,
+  tool: defaultContext7ToolInstance,
 };

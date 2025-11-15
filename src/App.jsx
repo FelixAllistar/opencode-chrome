@@ -2,9 +2,7 @@ import React, { useRef, useCallback, useEffect, useMemo } from 'react';
 import { Plus, BrainIcon, SearchIcon, X } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { useApiKeyInputs } from './hooks/useApiKeyInputs.js';
-import { useProviderRegistrations } from './hooks/useProviderRegistrations.js';
 import { useUnhandledRejectionHandler } from './hooks/useUnhandledRejectionHandler.js';
-import { useChatBootstrap } from './hooks/useChatBootstrap.js';
 import { useConversationLifecycle } from './hooks/useConversationLifecycle.js';
 import {
   MODELS,
@@ -12,9 +10,11 @@ import {
   DEFAULT_MODEL_PREFERENCES,
   DEFAULT_ENABLED_MODEL_IDS,
 } from './utils/constants.js';
+import { hasAnyProviderKey as hasAnyProviderKeyConfigured } from '@/utils/models.ts';
 import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index';
 
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
+import { ChatStoreProvider, useChatStore } from './contexts/ChatStore.jsx';
 import { InitialSetupScreen } from './components/setup/InitialSetupScreen.jsx';
 
 import { useOpenCodeChat } from './hooks/useOpenCodeChat.js';
@@ -159,7 +159,10 @@ function AppContent() {
     isInitialDataLoading,
     setChatsData,
     setCurrentChatIdState,
-  } = useChatBootstrap({ inputRef });
+    createNewChat,
+    switchChat,
+    deleteChatById,
+  } = useChatStore();
   const {
     inputs,
     updateInput: updateKeyInput,
@@ -182,95 +185,23 @@ function AppContent() {
     anthropicApiKey: anthropicKeyInput,
     openaiApiKey: openaiKeyInput,
   } = inputs;
-
-  const hasAnyProviderKey =
-    Boolean(apiKey) ||
-    Boolean(googleApiKey) ||
-    Boolean(openRouterApiKey) ||
-    Boolean(anthropicApiKey) ||
-    Boolean(openaiApiKey);
-
-  useProviderRegistrations({
-    braveSearchApiKey,
-    context7ApiKey,
-  });
+  const providerApiKeys = useMemo(
+    () => ({
+      openCode: apiKey,
+      google: googleApiKey,
+      openRouter: openRouterApiKey,
+      anthropic: anthropicApiKey,
+      openai: openaiApiKey,
+    }),
+    [apiKey, googleApiKey, openRouterApiKey, anthropicApiKey, openaiApiKey]
+  );
+  const hasAnyProviderKey = hasAnyProviderKeyConfigured(providerApiKeys);
 
   useUnhandledRejectionHandler({
     currentChatId,
     chatsData,
     setChatsData,
   });
-
-  const createNewChat = useCallback(async () => {
-    const newChatMetadata = await createChat();
-
-    setChatsData(prev => ({
-      ...prev,
-      [newChatMetadata.id]: {
-        metadata: newChatMetadata,
-        messages: [],
-        status: 'ready'
-      }
-    }));
-
-    setCurrentChatIdState(newChatMetadata.id);
-    await setCurrentChatId(newChatMetadata.id);
-
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, 0);
-
-    return newChatMetadata.id;
-  }, [setChatsData, setCurrentChatIdState, setCurrentChatId]);
-
-  const switchChat = async (chatId) => {
-    if (chatId === currentChatId) return;
-
-    setCurrentChatIdState(chatId);
-    await setCurrentChatId(chatId);
-
-    if (chatsData[chatId] && chatsData[chatId].messages.length === 0) {
-      const messages = await loadChatMessages(chatId);
-      const resetMessages = messages.map(msg => ({
-        ...msg,
-        status: msg.status === 'streaming' || msg.status === 'submitted' ? 'ready' : msg.status
-      }));
-      setChatsData(prev => ({
-        ...prev,
-        [chatId]: {
-          ...prev[chatId],
-          messages: resetMessages
-        }
-      }));
-    }
-
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, 100);
-  };
-
-  const deleteChatById = async (chatId) => {
-    await deleteChat(chatId);
-
-    setChatsData(prev => {
-      const newChats = { ...prev };
-      delete newChats[chatId];
-      return newChats;
-    });
-
-    if (chatId === currentChatId) {
-      const remainingChats = Object.values(chatsData).map(c => c.metadata).filter(c => c.id !== chatId).sort((a, b) => b.updatedAt - a.updatedAt);
-      if (remainingChats.length > 0) {
-        await switchChat(remainingChats[0].id);
-      } else {
-        setCurrentChatIdState(null);
-      }
-    }
-  };
 
   const handleToggleTool = useCallback((toolId, enable) => {
     setEnabledToolIds((previous) => {
@@ -327,6 +258,8 @@ function AppContent() {
     apiKey,
     googleApiKey,
     openRouterApiKey,
+    anthropicApiKey,
+    openaiApiKey,
     inputRef,
     isInitialDataLoading,
   });
@@ -456,6 +389,20 @@ function AppContent() {
     setChatsData({});
     setCurrentChatIdState(null);
   };
+
+  useEffect(() => {
+    if (isInitialDataLoading || !currentChatId || !inputRef?.current) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [isInitialDataLoading, currentChatId, inputRef]);
 
   // Convert AI SDK 5.0 parts to chain-of-thought format
   const convertPartsToChainOfThought = (parts) => {
@@ -957,7 +904,9 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <ChatStoreProvider>
+        <AppContent />
+      </ChatStoreProvider>
     </ThemeProvider>
   );
 }
