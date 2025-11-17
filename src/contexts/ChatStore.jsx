@@ -121,31 +121,44 @@ export function ChatStoreProvider({ children }) {
     [currentChatId, chatsData]
   );
 
-  const deleteChatById = useCallback(
-    async (chatId) => {
-      if (!chatId) return;
+  const deleteChatsByIds = useCallback(
+    async (chatIds) => {
+      const idsToDelete = Array.from(new Set(chatIds.filter(Boolean)));
+      if (idsToDelete.length === 0) return;
 
-      await deleteChatStorage(chatId);
+      await Promise.all(idsToDelete.map((id) => deleteChatStorage(id)));
 
+      let remainingMetadata = [];
       setChatsData((prev) => {
         const next = { ...prev };
-        delete next[chatId];
+        idsToDelete.forEach((id) => {
+          delete next[id];
+        });
+        remainingMetadata = Object.values(next)
+          .map((c) => c.metadata)
+          .sort((a, b) => b.updatedAt - a.updatedAt);
         return next;
       });
 
-      if (chatId === currentChatId) {
-        const remainingMetadata = Object.values(chatsData)
-          .map((c) => c.metadata)
-          .filter((c) => c.id !== chatId)
-          .sort((a, b) => b.updatedAt - a.updatedAt);
-        if (remainingMetadata.length > 0) {
-          await switchChat(remainingMetadata[0].id);
-        } else {
-          setCurrentChatIdState(null);
-        }
+      if (!idsToDelete.includes(currentChatId)) {
+        return;
+      }
+
+      if (remainingMetadata.length > 0) {
+        await switchChat(remainingMetadata[0].id);
+      } else {
+        setCurrentChatIdState(null);
+        await persistCurrentChatId(null);
       }
     },
-    [chatsData, currentChatId, switchChat]
+    [currentChatId, switchChat]
+  );
+
+  const deleteChatById = useCallback(
+    async (chatId) => {
+      await deleteChatsByIds([chatId]);
+    },
+    [deleteChatsByIds]
   );
 
   const value = {
@@ -157,6 +170,7 @@ export function ChatStoreProvider({ children }) {
     createNewChat,
     switchChat,
     deleteChatById,
+    deleteChatsByIds,
   };
 
   return <ChatStoreContext.Provider value={value}>{children}</ChatStoreContext.Provider>;
@@ -169,4 +183,3 @@ export function useChatStore() {
   }
   return ctx;
 }
-

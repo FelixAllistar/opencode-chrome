@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, BrainIcon, SearchIcon, X } from 'lucide-react';
 import { useStorage } from './hooks/useStorage.js';
 import { useApiKeyInputs } from './hooks/useApiKeyInputs.js';
@@ -162,6 +162,7 @@ function AppContent() {
     createNewChat,
     switchChat,
     deleteChatById,
+    deleteChatsByIds,
   } = useChatStore();
   const {
     inputs,
@@ -244,7 +245,65 @@ function AppContent() {
   // The useStreamingChat hook handles updating chatsData internally
 
   // Derived state from chatsData
-  const chats = Object.values(chatsData).map(c => c.metadata).sort((a, b) => b.updatedAt - a.updatedAt);
+  const chats = useMemo(
+    () =>
+      Object.values(chatsData)
+        .map((c) => c.metadata)
+        .sort((a, b) => b.updatedAt - a.updatedAt),
+    [chatsData]
+  );
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedChatIds, setSelectedChatIds] = useState([]);
+
+  useEffect(() => {
+    setSelectedChatIds((prev) => {
+      const nextSelection = prev.filter((id) => chats.some((chat) => chat.id === id));
+      return nextSelection.length === prev.length ? prev : nextSelection;
+    });
+  }, [chats]);
+
+  const isAllSelected = chats.length > 0 && selectedChatIds.length === chats.length;
+
+  const handleToggleSelectionMode = useCallback(() => {
+    setIsSelectionMode((prev) => {
+      const nextMode = !prev;
+      if (!nextMode) {
+        setSelectedChatIds([]);
+      }
+      return nextMode;
+    });
+  }, []);
+
+  const handleSelectAllChats = useCallback(() => {
+    setSelectedChatIds((prev) => {
+      if (chats.length > 0 && prev.length === chats.length) {
+        return [];
+      }
+      return chats.map((chat) => chat.id);
+    });
+  }, [chats]);
+
+  const handleToggleChatSelection = useCallback((chatId) => {
+    setSelectedChatIds((prev) => {
+      if (prev.includes(chatId)) {
+        return prev.filter((id) => id !== chatId);
+      }
+      return [...prev, chatId];
+    });
+  }, []);
+
+  const clearChatSelection = useCallback(() => {
+    setSelectedChatIds([]);
+  }, []);
+
+  const handleDeleteSelectedChats = useCallback(async () => {
+    if (selectedChatIds.length === 0) {
+      return;
+    }
+    await deleteChatsByIds(selectedChatIds);
+    setSelectedChatIds([]);
+    setIsSelectionMode(false);
+  }, [selectedChatIds, deleteChatsByIds]);
   const currentChatMessages = chat.messages || [];
   const currentChatStatus = chat.status;
 
@@ -715,9 +774,17 @@ function AppContent() {
       <AppSidebar
         chats={chats}
         currentChatId={currentChatId}
+        selectedChatIds={selectedChatIds}
+        selectionMode={isSelectionMode}
         onNewChat={createNewChat}
         onSelectChat={switchChat}
         onDeleteChat={deleteChatById}
+        onToggleSelectionMode={handleToggleSelectionMode}
+        onToggleChatSelection={handleToggleChatSelection}
+        onClearSelection={clearChatSelection}
+        onDeleteSelectedChats={handleDeleteSelectedChats}
+        onSelectAllChats={handleSelectAllChats}
+        isAllSelected={isAllSelected}
       />
       <SidebarInset className="h-screen flex flex-col">
         <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
