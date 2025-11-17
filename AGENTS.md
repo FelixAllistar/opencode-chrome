@@ -47,11 +47,15 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 - The App’s header settings menu renders `ThemeSwitcher` plus “Clear All Chats,” so these theme controls stay in one place.
 
 ### Multi-chat persistence
-- `src/utils/chatStorage.js` exposes `getChatsList`, `createChat`, `loadChatMessages`, `saveChatMessages`, `deleteChat`, `getCurrentChatId`, and `setCurrentChatId`. Metadata and messages are stored separately using `chrome.storage.local`.
+- `src/utils/chatStorage.js` exposes `getChatsList`, `createChat`, `loadChatMessages`, `saveChatMessages`, `deleteChat`, `deleteChats`, `getCurrentChatId`, and `setCurrentChatId`. Metadata and messages are stored separately using `chrome.storage.local`.
 - Chat metadata includes `id`, `title`, `createdAt`, `updatedAt`, `messageCount`, and `lastMessage`. Titles default to the first user message (capped around 30 characters) unless manually overridden.
 - `saveChatMessages` updates the metadata list when `updateMetadata` is `true`, so the sidebar can show the latest timestamp/title without extra requests.
 - `createChat` uses `generateId()` (from the `ai` package) and initializes an empty message list; `loadChatMessages` and `deleteChat` touch the same `CHAT_PREFIX + chatId` key.
 - App loading logic: on mount, read the chat list + `opencode_current_chat` from storage, hydrate `chatsData`, reset any lingering `streaming`/`submitted` statuses to `ready`, and set `currentChatId`. Switching chats loads messages on demand (if they haven’t been cached yet) and focuses the input.
+
+### Sidebar chat selection & bulk delete
+- `src/components/app-sidebar.tsx` renders the chat list using the shared shadcn `Sidebar` primitives. The header shows a `+` new-chat button and a `Select`/`Done` toggle; when selection mode is active, a compact bulk bar appears with a square “select all” checkbox and a `Delete` button. Circle selectors on each row mirror the selection state.
+- `ChatStoreProvider` in `src/contexts/ChatStore.jsx` now exposes `deleteChatsByIds` in addition to `deleteChatById`. Both call `deleteChats` from `chatStorage.js` so chat metadata and message payloads are removed together, and the provider moves `currentChatId` to the newest remaining chat (or clears it) when the active chat is deleted.
 
 ### Hooks & AI services
 - `src/hooks/useStreamingChat.js` is the streaming hook at the heart of the experience. It uses `streamText` (from the `ai` package) with `convertToModelMessages`, `getProvider(selectedModel.id, selectedModel.type, { openCode: apiKey, google: googleApiKey })`, and tools from `src/services/ai/tools.js`. It maintains `messages`, `status`, `error`, and an `AbortController`.

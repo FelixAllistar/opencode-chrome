@@ -22,7 +22,6 @@ import {
   createChat,
   loadChatMessages,
   saveChatMessages,
-  deleteChat,
   setCurrentChatId,
 } from './utils/chatStorage.js';
 import { AppSidebar } from './components/app-sidebar.jsx';
@@ -290,10 +289,6 @@ function AppContent() {
       }
       return [...prev, chatId];
     });
-  }, []);
-
-  const clearChatSelection = useCallback(() => {
-    setSelectedChatIds([]);
   }, []);
 
   const handleDeleteSelectedChats = useCallback(async () => {
@@ -781,7 +776,6 @@ function AppContent() {
         onDeleteChat={deleteChatById}
         onToggleSelectionMode={handleToggleSelectionMode}
         onToggleChatSelection={handleToggleChatSelection}
-        onClearSelection={clearChatSelection}
         onDeleteSelectedChats={handleDeleteSelectedChats}
         onSelectAllChats={handleSelectAllChats}
         isAllSelected={isAllSelected}

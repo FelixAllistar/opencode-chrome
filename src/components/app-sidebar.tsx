@@ -29,7 +29,6 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onDeleteChat: (chatId: string) => void;
   onToggleSelectionMode: () => void;
   onToggleChatSelection: (chatId: string) => void;
-  onClearSelection: () => void;
   onDeleteSelectedChats: () => void;
   onSelectAllChats: () => void;
   isAllSelected: boolean;
@@ -61,7 +60,6 @@ export function AppSidebar({
   onDeleteChat,
   onToggleSelectionMode,
   onToggleChatSelection,
-  onClearSelection,
   onDeleteSelectedChats,
   onSelectAllChats,
   isAllSelected,
@@ -70,73 +68,58 @@ export function AppSidebar({
   const selectedCount = selectedChatIds.length;
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader className="space-y-2 px-3 py-2">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Conversations
-            </p>
-            <p className="text-base font-semibold text-sidebar-foreground">
-              Chats
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onNewChat}
-              aria-label="Start a new chat"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={selectionMode ? "secondary" : "outline"}
-              size="sm"
-              className="font-semibold"
-              onClick={onToggleSelectionMode}
-            >
-              {selectionMode ? "Done" : "Select"}
-            </Button>
-          </div>
+      <SidebarHeader className="px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onNewChat}
+            aria-label="Start a new chat"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={selectionMode ? "secondary" : "outline"}
+            size="sm"
+            className="font-semibold tracking-wide"
+            onClick={onToggleSelectionMode}
+          >
+            {selectionMode ? "Done" : "Select"}
+          </Button>
         </div>
 
         {selectionMode && (
-          <div className="flex flex-col gap-2 rounded-lg border border-border/70 bg-background/70 px-2 py-1 text-xs text-muted-foreground shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">
-                {selectedCount > 0
-                  ? `${selectedCount} of ${chats.length} selected`
-                  : 'Tap chats to select'}
+          <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/40 pt-2 text-xs">
+            <button
+              type="button"
+              onClick={onSelectAllChats}
+              aria-pressed={isAllSelected}
+              aria-label={isAllSelected ? 'Deselect all chats' : 'Select all chats'}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <span
+                className={cn(
+                  "flex h-4 w-4 items-center justify-center rounded-[4px] border",
+                  isAllSelected
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border/70 bg-transparent"
+                )}
+              >
+                {isAllSelected && <Check className="h-3 w-3" />}
               </span>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="opacity-80 px-2 text-[11px]"
-                onClick={onSelectAllChats}
-              >
-                {isAllSelected ? 'Deselect all' : 'Select all'}
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="destructive"
-                size="sm"
-                className="flex-1"
-                onClick={onDeleteSelectedChats}
-                disabled={selectedCount === 0}
-              >
-                Delete selected
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={onClearSelection}
-                disabled={selectedCount === 0}
-              >
-                Clear
-              </Button>
-            </div>
+              <span className="text-[11px]">
+                {selectedCount > 0 ? `${selectedCount} selected` : 'Select all'}
+              </span>
+            </button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="min-w-[80px] text-xs"
+              onClick={onDeleteSelectedChats}
+              disabled={selectedCount === 0}
+            >
+              Delete
+            </Button>
           </div>
         )}
       </SidebarHeader>

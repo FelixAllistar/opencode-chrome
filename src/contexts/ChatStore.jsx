@@ -7,7 +7,7 @@ import {
   getCurrentChatId,
   setCurrentChatId as persistCurrentChatId,
   createChat as createChatMetadata,
-  deleteChat as deleteChatStorage,
+  deleteChats,
 } from '@/utils/chatStorage.js';
 
 const READY_STATUS = 'ready';
@@ -126,7 +126,7 @@ export function ChatStoreProvider({ children }) {
       const idsToDelete = Array.from(new Set(chatIds.filter(Boolean)));
       if (idsToDelete.length === 0) return;
 
-      await Promise.all(idsToDelete.map((id) => deleteChatStorage(id)));
+      await deleteChats(idsToDelete);
 
       let remainingMetadata = [];
       setChatsData((prev) => {
