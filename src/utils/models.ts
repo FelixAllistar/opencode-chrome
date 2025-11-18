@@ -1,5 +1,5 @@
 import type { ModelConfig, ProviderApiKeys } from '@/types/index.ts';
-import { MODELS } from '@/utils/constants.js';
+import { MODELS, PROVIDER_LABELS } from '@/utils/constants.js';
 
 export const ALL_MODELS = MODELS as unknown as ModelConfig[];
 
@@ -21,7 +21,7 @@ export const getProviderLabel = (model: ModelConfig | undefined | null): string 
   if (!model) {
     return 'selected model';
   }
-  return model.name || model.type || 'selected model';
+  return model.name || PROVIDER_LABELS[model.type] || model.type || 'selected model';
 };
 
 export const getRequiredApiKey = (
@@ -56,4 +56,3 @@ export const hasAnyProviderKey = (keys: ProviderApiKeys): boolean => {
       keys.openai
   );
 };
-

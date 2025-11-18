@@ -11,7 +11,7 @@ import { Switch } from '../ui/switch.tsx';
 import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form.tsx';
 import { ApiKeysSection } from './ApiKeysSection.jsx';
 import { TOOL_DEFINITIONS } from '../../services/ai/tools/index';
-import { PROVIDER_TYPES } from '../../utils/constants.js';
+import { PROVIDER_TYPES, PROVIDER_LABELS } from '../../utils/constants.js';
 
 const settingsSchema = z.object({
   openCodeApiKey: z.string(),
@@ -177,6 +177,8 @@ export const SettingsMenu = ({
     });
   };
 
+  const resolveProviderLabel = (provider) => PROVIDER_LABELS[provider] ?? provider;
+
   return (
     <div ref={menuRef} className="relative">
       <Button
@@ -242,7 +244,8 @@ export const SettingsMenu = ({
                   <div className="space-y-2 px-2">
                     {models.map((model) => {
                       const isChecked = enabledModelIds.includes(model.id);
-                      const capabilityLabel = `${model.type} · ${model.isVision ? 'vision' : 'text'} · ${model.supportsTools ? 'tools' : 'no tools'}`;
+                      const providerLabel = resolveProviderLabel(model.type);
+                      const capabilityLabel = `${providerLabel} · ${model.isVision ? 'vision' : 'text'} · ${model.supportsTools ? 'tools' : 'no tools'}`;
                       return (
                         <div key={model.id} className="flex items-center justify-between">
                           <div className="pr-2">
@@ -301,11 +304,11 @@ export const SettingsMenu = ({
                               <FormControl>
                                 <select
                                   {...field}
-                                  className="w-full border px-2 py-1 text-xs rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                  className="w-full border border-input bg-popover px-2 py-1 text-xs text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                                 >
                                   {availableProviders.map((provider) => (
                                     <option key={provider} value={provider}>
-                                      {provider}
+                                      {resolveProviderLabel(provider)}
                                     </option>
                                   ))}
                                 </select>
