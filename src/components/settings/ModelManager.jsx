@@ -38,6 +38,7 @@ export const ModelManager = ({
   const [newModelProvider, setNewModelProvider] = useState('');
   const [newModelVision, setNewModelVision] = useState(true);
   const [newModelTools, setNewModelTools] = useState(true);
+  const [validationError, setValidationError] = useState('');
 
   const effectiveModels = useMemo(
     () => [...models, ...(customModels ?? [])],
@@ -83,11 +84,23 @@ export const ModelManager = ({
 
   const handleAddModel = (e) => {
     e.preventDefault();
+    setValidationError('');
+
     const trimmedId = newModelId.trim();
     const trimmedName = newModelName.trim();
     const provider = newModelProvider;
 
-    if (!trimmedId || !trimmedName || !provider) return;
+    if (!trimmedId || !trimmedName || !provider) {
+      setValidationError('All fields are required.');
+      return;
+    }
+
+    // Check for duplicate ID
+    const isDuplicate = effectiveModels.some(m => m.id === trimmedId);
+    if (isDuplicate) {
+      setValidationError(`Model ID "${trimmedId}" already exists.`);
+      return;
+    }
 
     onAddCustomModel?.({
       id: trimmedId,
@@ -100,6 +113,7 @@ export const ModelManager = ({
     // Reset and close
     setNewModelId('');
     setNewModelName('');
+    setValidationError('');
     setIsAddingModel(false);
   };
 
@@ -134,6 +148,11 @@ export const ModelManager = ({
                 <p className="text-sm text-muted-foreground">
                   Enter the details for your custom model. Ensure the ID matches exactly what the provider expects.
                 </p>
+                {validationError && (
+                  <p className="text-sm text-destructive font-medium bg-destructive/10 px-3 py-2 rounded-md">
+                    {validationError}
+                  </p>
+                )}
               </div>
 
               <form onSubmit={handleAddModel} className="space-y-4">

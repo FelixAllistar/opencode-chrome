@@ -134,15 +134,17 @@ export function ChatStoreProvider({ children }) {
 
       await deleteChats(idsToDelete);
 
-      let remainingMetadata = [];
+      // Compute remaining chats from current snapshot
+      const remainingMetadata = Object.values(chatsData)
+        .filter((c) => !idsToDelete.includes(c.metadata.id))
+        .map((c) => c.metadata)
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+
       setChatsData((prev) => {
         const next = { ...prev };
         idsToDelete.forEach((id) => {
           delete next[id];
         });
-        remainingMetadata = Object.values(next)
-          .map((c) => c.metadata)
-          .sort((a, b) => b.updatedAt - a.updatedAt);
         return next;
       });
 

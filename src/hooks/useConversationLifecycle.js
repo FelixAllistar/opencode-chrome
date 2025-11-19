@@ -35,14 +35,27 @@ export function useConversationLifecycle({
     previousChatIdRef.current = currentChatId;
   }, [currentChatId]);
 
+  const pendingMessageRef = useRef(null);
+
+  useEffect(() => {
+    if (chat && pendingMessageRef.current) {
+      const message = pendingMessageRef.current;
+      pendingMessageRef.current = null;
+      handleSend(message);
+    }
+  }, [chat]);
+
   const handleSend = useCallback(async (message) => {
     if (!currentChatIdRef.current) {
-      const newChatId = await createNewChat();
-      currentChatIdRef.current = newChatId;
+      pendingMessageRef.current = message;
+      await createNewChat();
+      return;
     }
 
     const currentChat = chatRef.current;
+    // If we have an ID but no chat instance yet (or it's stale), wait for the effect
     if (!currentChat || typeof currentChat.sendMessage !== 'function') {
+      pendingMessageRef.current = message;
       return;
     }
 
@@ -92,15 +105,34 @@ export function useConversationLifecycle({
     const requiresNewChat = !currentChatIdRef.current || hasExistingMessages;
 
     if (requiresNewChat) {
-      await createNewChat();
-    }
+      // If we need a new chat, just trigger handleSend with the text.
+      // It will handle creation and pending message queueing.
+      if (inputRef?.current) {
+        // If we have the input, we can just clear the current chat ID ref 
+        // to force a new one, but we need to be careful.
+        // Actually, the safest way is to let handleSend do it.
+        // But wait, if we want to put it in the input box, we shouldn't send it yet.
 
-    const textarea = inputRef?.current;
-    if (textarea) {
-      textarea.value = text;
-      textarea.form?.requestSubmit();
+        // If we want to start a fresh chat but just put text in the box:
+        await createNewChat();
+        const textarea = inputRef.current;
+        textarea.value = text;
+        textarea.focus();
+      } else {
+        // If no input ref (e.g. popup closed?), send immediately
+        // This will trigger the createNewChat flow in handleSend
+        await handleSendRef.current({ text });
+      }
     } else {
-      await handleSendRef.current({ text });
+      // Existing chat, append to input
+      const textarea = inputRef?.current;
+      if (textarea) {
+        const currentVal = textarea.value;
+        textarea.value = currentVal ? `${currentVal}\n\n${text}` : text;
+        textarea.focus();
+      } else {
+        await handleSendRef.current({ text });
+      }
     }
   }, [createNewChat, inputRef]);
 
