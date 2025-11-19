@@ -63,7 +63,9 @@ export function ChatStoreProvider({ children }) {
 
         if (!mounted) return;
 
-        setChatsData(initialChatsData);
+        // Merge hydrated data with any live state that might have been created while loading
+        setChatsData(prev => ({ ...initialChatsData, ...prev }));
+
         if (activeChatId) {
           setCurrentChatIdState(activeChatId);
         }

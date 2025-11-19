@@ -36,16 +36,28 @@ export function useConversationLifecycle({
   }, [currentChatId]);
 
   const pendingMessageRef = useRef(null);
+  const handleSendRef = useRef(null);
 
   useEffect(() => {
+    // If we are still loading initial data, do not attempt to flush pending messages yet.
+    // We will wait until isInitialDataLoading is false.
+    if (isInitialDataLoading) return;
+
     if (chat && pendingMessageRef.current) {
       const message = pendingMessageRef.current;
       pendingMessageRef.current = null;
-      handleSend(message);
+      // Use the ref to ensure we call the latest handleSend
+      handleSendRef.current?.(message);
     }
-  }, [chat]);
+  }, [chat, isInitialDataLoading]);
 
   const handleSend = useCallback(async (message) => {
+    // If initial data is still loading, queue the message and return.
+    if (isInitialDataLoading) {
+      pendingMessageRef.current = message;
+      return;
+    }
+
     if (!currentChatIdRef.current) {
       pendingMessageRef.current = message;
       await createNewChat();
@@ -90,7 +102,6 @@ export function useConversationLifecycle({
     }
   }, [attachedContextSnippets, createNewChat]);
 
-  const handleSendRef = useRef(handleSend);
   useEffect(() => {
     handleSendRef.current = handleSend;
   }, [handleSend]);
@@ -110,11 +121,14 @@ export function useConversationLifecycle({
       if (inputRef?.current) {
         // If we have the input, we can just clear the current chat ID ref 
         // to force a new one, but we need to be careful.
-        // Actually, the safest way is to let handleSend do it.
-        // But wait, if we want to put it in the input box, we shouldn't send it yet.
 
         // If we want to start a fresh chat but just put text in the box:
-        await createNewChat();
+
+        // Guard against race with initial load
+        if (!isInitialDataLoading) {
+          await createNewChat();
+        }
+
         const textarea = inputRef.current;
         textarea.value = text;
         textarea.focus();
