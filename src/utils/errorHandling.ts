@@ -3,6 +3,8 @@
  */
 
 import { flushSync } from 'react-dom';
+import { filterMessagesForAPI } from '@/utils/messageTransforms.ts';
+import type { ChatError, ChatErrorKind } from '@/types/index.ts';
 
 export interface ErrorForUI {
   toolName: string;
@@ -58,24 +60,40 @@ export const createErrorForUI = (error: Error, toolCallId: string = 'error'): Er
   };
 };
 
-  /**
-   * Filters messages for API consumption, excluding error messages
-   */
-  export const filterMessagesForAPI = (messages: any[]): any[] => {
-    return messages.filter(message => {
-      // Exclude messages with error status
-      if (message.status === 'error') {
-        return false;
-      }
+/**
+ * Creates a standardized ChatError for banner-level UI.
+ * This augments the ChatError with an `error` field for compatibility.
+ */
+export const createChatError = (kind: ChatErrorKind, input: unknown): ChatError => {
+  let message = 'Unknown error';
+  let underlying: Error | undefined;
 
-      // Exclude messages that have error parts
-      if (message.parts?.some((part: any) => part.type?.startsWith('tool-') && part.state === 'output-error')) {
-        return false;
-      }
+  if (input instanceof Error) {
+    message = input.message || message;
+    underlying = input;
+  } else if (typeof input === 'string') {
+    message = input || message;
+  } else if (input && typeof (input as any).message === 'string') {
+    message = (input as any).message;
+  }
 
-      return true;
-    });
+  const base: ChatError = {
+    kind,
+    message,
+    error: message,
+    details: input,
+    underlying,
   };
+
+  return base;
+};
+
+export const formatChatError = (error: ChatError): string => {
+  const prefix = error.kind !== 'unknown' ? `${error.kind}: ` : '';
+  return `${prefix}${error.message || 'Unknown error'}`;
+};
+
+export { filterMessagesForAPI };
 
 /**
  * Creates an unhandled promise rejection handler for AI SDK errors
@@ -116,16 +134,16 @@ export const createUnhandledRejectionHandler = (
               messages: prev[recentChatId].messages.map((msg: any) =>
                 msg.id === lastAiMessage.id
                   ? {
-                      ...msg,
-                      status: 'error',
-                      parts: [{
-                        type: 'tool-error',
-                        state: 'output-error',
-                        toolCallId: 'error',
-                        errorText: errorForUI.error,
-                        ...errorForUI
-                      }]
-                    }
+                    ...msg,
+                    status: 'error',
+                    parts: [{
+                      type: 'tool-error',
+                      state: 'output-error',
+                      toolCallId: 'error',
+                      errorText: errorForUI.error,
+                      ...errorForUI
+                    }]
+                  }
                   : msg
               )
             }

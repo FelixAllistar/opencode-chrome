@@ -111,16 +111,23 @@ export const saveChatMessages = async (chatId, messages, updateMetadata = true) 
 
 // Delete a chat
 export const deleteChat = async (chatId) => {
-  try {
-    // Remove from chats list
-    const chats = await getChatsList();
-    const filteredChats = chats.filter(chat => chat.id !== chatId);
-    await saveChatsList(filteredChats);
+  await deleteChats([chatId]);
+};
 
-    // Remove messages
-    await chrome.storage.local.remove([CHAT_PREFIX + chatId]);
+export const deleteChats = async (chatIds = []) => {
+  const idsToDelete = Array.from(new Set((chatIds || []).filter(Boolean)));
+  if (idsToDelete.length === 0) {
+    return;
+  }
+
+  try {
+    const chats = await getChatsList();
+    const remainingChats = chats.filter((chat) => !idsToDelete.includes(chat.id));
+    await saveChatsList(remainingChats);
+    const keysToRemove = idsToDelete.map((id) => CHAT_PREFIX + id);
+    await chrome.storage.local.remove(keysToRemove);
   } catch (error) {
-    console.error('Error deleting chat:', error);
+    console.error('Error deleting chats:', error);
   }
 };
 

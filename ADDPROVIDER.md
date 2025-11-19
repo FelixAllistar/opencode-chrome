@@ -1,6 +1,6 @@
 # Adding a New AI Provider
 
-This project routes every supported model through `src/services/ai/providers.js` so the streaming hook can call `streamText` with the right backend. The hook (`useOpenCodeChat`) only knows about `selectedModel.type`, not the nitty gritty of the SDK. Adding a provider means wiring together:
+This project routes every supported model through `src/services/ai/providers.js` so the streaming hook can call `streamText` with the right backend. The hook (`useStreamingChat`) only knows about `selectedModel.type`, not the nitty gritty of the SDK. Adding a provider means wiring together:
 
 1. the new SDK entry point,
 2. the API key the provider requires,
@@ -32,13 +32,13 @@ Follow these steps:
 ## 3. Point models at the new provider
 
 - Models live in `src/utils/constants.js`. Each entry includes `type`, `id`, `name`, and `isVision`.
-- Set `type` to your provider’s keyword (the same one `getProvider` looks for). This is how `useOpenCodeChat` decides which key to require and which API to call.
+- Set `type` to your provider’s keyword (the same one `getProvider` looks for). This is how `useStreamingChat` decides which key to require and which API to call.
 - If your provider only supports text, set `isVision: false` so the stream sanitizes images before hitting the SDK. If it is multimodal, leave or set `isVision: true`.
 - Add any new model IDs (`id`/`name`) that the provider exposes so they appear in the model selector.
 
 ## 4. Make sure the hook uses the right key
 
-- `useOpenCodeChat` already derives both the required key (`requiredApiKey`) and the provider config object (`providerApiKeys`). When adding fields:
+- `useStreamingChat` already derives both the required key (`requiredApiKey`) and the provider config object (`providerApiKeys`). When adding fields:
   - Extend `requiredApiKey` so it checks `selectedModel.type` against your new provider key name.
   - Include the new key in `providerApiKeys` so `getProvider` can see it.
 - Because `getProvider` is called in several places (e.g., when streaming or regenerating), updating the `type`/`providerApiKeys` once covers the entire hook.
@@ -52,4 +52,4 @@ Follow these steps:
 - Update any README/AGENTS guidance if your provider adds new settings or dependencies.
 - If the provider requires additional runtime config (e.g., `baseURL`, extra headers), document that in this doc so future contributors remember to wire it up before adding the model entry.
 
-With those pieces wired together, selecting your new model will cause `useOpenCodeChat` to gather the correct key, call `getProvider`, and stream through the new SDK just like the OpenCode or Gemini entries. Make sure to test the key/save flows manually since `pnpm run dev/build` is off limits.
+With those pieces wired together, selecting your new model will cause `useStreamingChat` to gather the correct key, call `getProvider`, and stream through the new SDK just like the OpenCode or Gemini entries. Make sure to test the key/save flows manually since `pnpm run dev/build` is off limits.

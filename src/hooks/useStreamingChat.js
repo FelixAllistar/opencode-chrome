@@ -3,145 +3,58 @@ import { streamText, convertToModelMessages, stepCountIs } from 'ai';
 import { getProvider } from '../services/ai/providers.js';
 import { getTools } from '../services/ai/tools/index';
 import { saveChatMessages } from '../utils/chatStorage.js';
-
-const MAX_TOOL_PART_TEXT_LENGTH = 900;
-
-const safeStringify = (value) => {
-  if (value === undefined || value === null) {
-    return '';
-  }
-
-  try {
-    return JSON.stringify(value);
-  } catch (error) {
-    return String(value);
-  }
-};
-
-const describeToolPartForModel = (part) => {
-  const toolName = part.toolName ?? part.type?.replace?.('tool-', '') ?? 'tool';
-  const segments = [];
-
-  if (part.state === 'input-available' || part.args || part.input) {
-    const args = part.args ?? part.input;
-    const argsText = safeStringify(args);
-    if (argsText) {
-      segments.push(`${toolName} input: ${argsText}`);
-    }
-  }
-
-  if (part.state === 'output-available' || part.result || part.output) {
-    const output = part.output ?? part.result;
-    const outputText = typeof output === 'string' ? output : safeStringify(output);
-    if (outputText) {
-      segments.push(`${toolName} output: ${outputText}`);
-    }
-  }
-
-  if (segments.length === 0) {
-    return '';
-  }
-
-  const combined = segments.join(' | ');
-  return combined.length > MAX_TOOL_PART_TEXT_LENGTH
-    ? `${combined.slice(0, MAX_TOOL_PART_TEXT_LENGTH)}...`
-    : combined;
-};
-
-const sanitizeMessagePartsForModel = (parts = [], isVisionModel) => {
-  const sanitized = [];
-
-  for (const part of parts) {
-    if (!isVisionModel && isVisualMessagePart(part)) {
-      continue;
-    }
-
-    if (part.type === 'text') {
-      sanitized.push({ ...part });
-      continue;
-    }
-
-    if (part.type === 'reasoning' && part.text) {
-      sanitized.push({ type: 'text', text: part.text });
-      continue;
-    }
-
-    if (part.type?.startsWith?.('tool-')) {
-      const text = describeToolPartForModel(part);
-      if (text) {
-        sanitized.push({ type: 'text', text });
-      }
-      continue;
-    }
-
-    if (isVisionModel) {
-      sanitized.push(part);
-    }
-  }
-
-  return sanitized;
-};
-
-const isVisualMessagePart = (part) => {
-  if (!part || typeof part !== 'object') {
-    return false;
-  }
-  if (part.type === 'image') {
-    return true;
-  }
-  if (part.type === 'file') {
-    return Boolean(part.mediaType?.startsWith?.('image/'));
-  }
-  return false;
-};
+import { sanitizeMessagePartsForModel } from '@/utils/messageTransforms.ts';
+import {
+  getRequiredApiKey,
+  getProviderLabel,
+  isVisionModel as isVisionModelForModel,
+  supportsTools as supportsToolsForModel,
+} from '@/utils/models.ts';
+import { createChatError } from '@/utils/errorHandling.ts';
 
 /**
- * Custom hook that provides useChat-like functionality with OpenCode Zen integration
+ * Streaming chat controller hook that lives on top of the shared ChatStore.
  */
-export function useOpenCodeChat({
+export function useStreamingChat({
   currentChatId,
   chatsData,
   setChatsData,
   apiKey,
   googleApiKey,
+  braveSearchApiKey,
+  context7ApiKey,
   openRouterApiKey,
   anthropicApiKey,
   openaiApiKey,
   selectedModel,
   enabledToolIds,
-  onError
+  onError,
 }) {
-  const [status, setStatus] = useState('ready');
-  const [messages, setMessages] = useState(chatsData[currentChatId]?.messages || []);
   const [error, setError] = useState(null);
   const abortControllerRef = useRef(null);
-  const statusRef = useRef(status);
+  const statusRef = useRef('ready');
 
   const currentChatData = chatsData[currentChatId];
-  const isVisionModel = Boolean(selectedModel?.isVision ?? true);
-  const supportsTools = Boolean(selectedModel?.supportsTools ?? true);
-  const tools = supportsTools ? getTools(enabledToolIds) : undefined;
-  const modelConversionOptions = supportsTools ? { tools } : undefined;
-
-  const requiredApiKey = useMemo(() => {
-    if (selectedModel?.type === 'google') {
-      return googleApiKey;
-    }
-
-    if (selectedModel?.type === 'anthropic') {
-      return anthropicApiKey;
-    }
-
-    if (selectedModel?.type === 'openrouter') {
-      return openRouterApiKey;
-    }
-
-    if (selectedModel?.type === 'openai') {
-      return openaiApiKey;
-    }
-
-    return apiKey;
-  }, [selectedModel?.type, googleApiKey, openRouterApiKey, apiKey, anthropicApiKey, openaiApiKey]);
+  const messages = currentChatData?.messages || [];
+  const status = currentChatData?.status || 'ready';
+  const isVisionModel = isVisionModelForModel(selectedModel);
+  const supportsTools = supportsToolsForModel(selectedModel);
+  const getBraveSearchApiKey = useCallback(() => braveSearchApiKey, [braveSearchApiKey]);
+  const getContext7ApiKey = useCallback(() => context7ApiKey, [context7ApiKey]);
+  const tools = useMemo(
+    () =>
+      supportsTools
+        ? getTools(enabledToolIds, {
+            getBraveSearchApiKey,
+            getContext7ApiKey,
+          })
+        : undefined,
+    [supportsTools, enabledToolIds, getBraveSearchApiKey, getContext7ApiKey]
+  );
+  const modelConversionOptions = useMemo(
+    () => (supportsTools ? { tools } : undefined),
+    [supportsTools, tools]
+  );
 
   const providerApiKeys = useMemo(
     () => ({
@@ -154,8 +67,13 @@ export function useOpenCodeChat({
     [apiKey, googleApiKey, openRouterApiKey, anthropicApiKey, openaiApiKey]
   );
 
+  const requiredApiKey = useMemo(
+    () => getRequiredApiKey(selectedModel, providerApiKeys),
+    [selectedModel, providerApiKeys]
+  );
+
   const getMissingApiKeyError = useCallback(() => {
-    const providerLabel = selectedModel?.name || selectedModel?.type || 'selected model';
+    const providerLabel = getProviderLabel(selectedModel);
     const message = `Missing API key for ${providerLabel}. Please set it in Settings and retry.`;
     return { name: 'MissingApiKey', message, error: message };
   }, [selectedModel]);
@@ -170,31 +88,20 @@ export function useOpenCodeChat({
     [isVisionModel]
   );
 
-  // Update messages when current chat changes
-  const chatsDataRef = useRef();
-  chatsDataRef.current = chatsData;
-
-  // Keep statusRef in sync with status state
+  // Keep statusRef in sync with current chat status
   useEffect(() => {
     statusRef.current = status;
-  }, [status]);
+  }, [status, currentChatId]);
 
-  // Sync messages with current chat (only when chatId changes, not on every chatsData change)
-  useEffect(() => {
-    if (!currentChatData) {
-      setMessages([]);
-      setStatus('ready');
-      return;
+  // Simple, provider-aware connectivity test
+  const testConnectivity = useCallback(async () => {
+    // Only probe the OpenCode endpoint for models that actually use the OpenCode provider.
+    if (!selectedModel || selectedModel.type !== 'openai-compatible') {
+      return true;
     }
 
-    setMessages(currentChatData.messages || []);
-    setStatus(currentChatData.status || 'ready');
-  }, [currentChatId, currentChatData]);
-
-  // Simple network connectivity test
-  const testConnectivity = useCallback(async () => {
-    if (selectedModel?.type === 'openrouter') {
-      return true;
+    if (!apiKey) {
+      return false;
     }
 
     try {
@@ -211,7 +118,7 @@ export function useOpenCodeChat({
     } catch (error) {
       return false;
     }
-  }, [apiKey, selectedModel?.type]);
+  }, [apiKey, selectedModel]);
 
   
   // Helper function to check if we can send messages
@@ -222,10 +129,9 @@ export function useOpenCodeChat({
   // Reset chat state for severe error cases
   const resetChatState = useCallback(() => {
     setError(null);
-    setStatus('ready');
     // Filter out error messages - AI SDK handles clean message preparation
     const cleanMessages = messages.filter(msg => msg.status !== 'error');
-    setMessages(cleanMessages);
+    statusRef.current = 'ready';
     setChatsData(prev => ({
       ...prev,
       [currentChatId]: {
@@ -242,11 +148,10 @@ export function useOpenCodeChat({
     if (messages.length === 0) {
       const connectivityOk = await testConnectivity();
       if (!connectivityOk) {
-        const error = {
-          name: 'ConnectivityError',
-          message: 'Failed to connect to OpenCode API. Please check your internet connection and API key.',
-          error: 'Failed to connect to OpenCode API. Please check your internet connection and API key.'
-        };
+        const error = createChatError(
+          'connectivity',
+          new Error('Failed to connect to OpenCode API. Please check your internet connection and API key.')
+        );
         setError(error);
         if (onError) {
           onError(error);
@@ -256,7 +161,8 @@ export function useOpenCodeChat({
     }
 
     if (!requiredApiKey || !currentChatId) {
-      const errorObj = getMissingApiKeyError();
+      const missing = getMissingApiKeyError();
+      const errorObj = createChatError('missing-key', new Error(missing.message));
       setError(errorObj);
       if (currentChatId) {
         setChatsData(prev => ({
@@ -268,7 +174,6 @@ export function useOpenCodeChat({
           }
         }));
       }
-      setStatus('error');
       statusRef.current = 'error';
       if (onError) {
         onError(errorObj);
@@ -285,25 +190,15 @@ export function useOpenCodeChat({
       status: 'streaming'
     };
 
-    // Add the AI message to the conversation
+    // Add the AI message to the conversation and mark as streaming
     const messagesWithAI = [...contextMessages, aiMessage];
 
-    // Set up streaming
-    setMessages(messagesWithAI);
-    setChatsData(prev => ({
-      ...prev,
-      [currentChatId]: {
-        ...prev[currentChatId],
-        messages: messagesWithAI
-      }
-    }));
-
-    setStatus('streaming');
     statusRef.current = 'streaming';
     setChatsData(prev => ({
       ...prev,
       [currentChatId]: {
         ...prev[currentChatId],
+        messages: messagesWithAI,
         status: 'streaming'
       }
     }));
@@ -359,20 +254,12 @@ export function useOpenCodeChat({
 
           case 'error':
             // Handle error chunk
-            const errorObj = {
-              name: chunk.error.name || 'AI_APICallError',
-              message: chunk.error.message || 'An error occurred during streaming',
-              error: chunk.error.message || 'An error occurred during streaming',
-              cause: chunk.error.cause,
-              stack: chunk.error.stack
-            };
+            const errorObj = createChatError('api', chunk.error);
 
             currentStreamingMessages = currentStreamingMessages.map(msg =>
               msg.id === aiMessageId ? { ...msg, status: 'error' } : msg
             );
 
-            setMessages(currentStreamingMessages);
-            setStatus('error');
             statusRef.current = 'error';
             setError(errorObj);
             setChatsData(prev => ({
@@ -466,8 +353,6 @@ export function useOpenCodeChat({
             ? { ...msg, parts: updatedParts, status: 'streaming' }
             : msg
         );
-
-        setMessages(currentStreamingMessages);
         setChatsData(prev => ({
           ...prev,
           [currentChatId]: {
@@ -503,8 +388,7 @@ export function useOpenCodeChat({
           : msg
       );
 
-      setMessages(finalMessages);
-      setStatus('ready');
+      statusRef.current = 'ready';
       setChatsData(prev => ({
         ...prev,
         [currentChatId]: {
@@ -546,8 +430,6 @@ export function useOpenCodeChat({
         msg.id === aiMessageId ? { ...msg, status: 'error' } : msg
       );
 
-      setMessages(errorMessages);
-      setStatus('error');
       statusRef.current = 'error';
       setChatsData(prev => ({
         ...prev,
@@ -567,7 +449,21 @@ export function useOpenCodeChat({
     } finally {
       abortControllerRef.current = null;
     }
-  }, [currentChatId, setChatsData, selectedModel, requiredApiKey, providerApiKeys, onError, testConnectivity, getMissingApiKeyError]);
+  }, [
+    currentChatId,
+    setChatsData,
+    selectedModel,
+    requiredApiKey,
+    providerApiKeys,
+    onError,
+    testConnectivity,
+    getMissingApiKeyError,
+    messages,
+    supportsTools,
+    tools,
+    modelConversionOptions,
+    prepareMessagesForModel,
+  ]);
 
   // Custom sendMessage that integrates with your chat system
   const sendMessage = useCallback(async (message) => {
@@ -575,11 +471,10 @@ export function useOpenCodeChat({
     if (messages.length === 0) {
       const connectivityOk = await testConnectivity();
       if (!connectivityOk) {
-        const error = {
-          name: 'ConnectivityError',
-          message: 'Failed to connect to OpenCode API. Please check your internet connection and API key.',
-          error: 'Failed to connect to OpenCode API. Please check your internet connection and API key.' // For UI compatibility
-        };
+        const error = createChatError(
+          'connectivity',
+          new Error('Failed to connect to OpenCode API. Please check your internet connection and API key.')
+        );
         setError(error);
         if (onError) {
           onError(error);
@@ -649,9 +544,8 @@ export function useOpenCodeChat({
 
     // If required API key is missing, bail out before creating the assistant message
     if (!requiredApiKey) {
-      const errorObj = getMissingApiKeyError();
-      setMessages(allMessages);
-      setStatus('error');
+      const missing = getMissingApiKeyError();
+      const errorObj = createChatError('missing-key', new Error(missing.message));
       statusRef.current = 'error';
       setError(errorObj);
       setChatsData(prev => ({
@@ -671,8 +565,7 @@ export function useOpenCodeChat({
 
     // Update state immediately
     const initialMessages = [...allMessages, aiMessage];
-    setMessages(initialMessages);
-    setStatus('submitted');
+    statusRef.current = 'submitted';
 
     // Update chatsData
     setChatsData(prev => ({
@@ -691,7 +584,6 @@ export function useOpenCodeChat({
     let currentStreamingMessages = initialMessages;
 
     try {
-      setStatus('streaming');
       statusRef.current = 'streaming'; // Update ref immediately
       setChatsData(prev => ({
         ...prev,
@@ -764,8 +656,6 @@ export function useOpenCodeChat({
               msg.id === aiMessageId ? { ...msg, status: 'error' } : msg
             );
 
-            setMessages(currentStreamingMessages);
-            setStatus('error');
             statusRef.current = 'error';
             setError(errorObj);
             setChatsData(prev => ({
@@ -886,8 +776,6 @@ export function useOpenCodeChat({
             ? { ...msg, parts: updatedParts, status: 'streaming' }
             : msg
         );
-
-        setMessages(currentStreamingMessages);
         setChatsData(prev => ({
           ...prev,
           [currentChatId]: {
@@ -923,8 +811,7 @@ export function useOpenCodeChat({
           : msg
       );
 
-      setMessages(finalMessages);
-      setStatus('ready');
+      statusRef.current = 'ready';
       setChatsData(prev => ({
         ...prev,
         [currentChatId]: {
@@ -953,23 +840,13 @@ export function useOpenCodeChat({
       }
 
     } catch (streamError) {
-      // Use AI SDK's built-in error structure but maintain UI compatibility
-      const error = {
-        name: streamError.name || 'StreamError',
-        message: streamError.message || 'An error occurred during streaming',
-        error: streamError.message || 'An error occurred during streaming', // For UI compatibility
-        cause: streamError.cause,
-        stack: streamError.stack
-      };
-
+      const error = createChatError('stream', streamError);
       setError(error);
 
       const errorMessages = currentStreamingMessages.map(msg =>
         msg.id === aiMessageId ? { ...msg, status: 'error' } : msg
       );
 
-      setMessages(errorMessages);
-      setStatus('error');
       statusRef.current = 'error'; // Update ref immediately
       setChatsData(prev => ({
         ...prev,
@@ -990,7 +867,22 @@ export function useOpenCodeChat({
     } finally {
       abortControllerRef.current = null;
     }
-  }, [currentChatId, messages, requiredApiKey, providerApiKeys, selectedModel, chatsData, setChatsData, onError, testConnectivity, getMissingApiKeyError]);
+  }, [
+    currentChatId,
+    messages,
+    requiredApiKey,
+    providerApiKeys,
+    selectedModel,
+    setChatsData,
+    onError,
+    testConnectivity,
+    getMissingApiKeyError,
+    supportsTools,
+    tools,
+    modelConversionOptions,
+    prepareMessagesForModel,
+    error,
+  ]);
 
   // Stop generation
   const stop = useCallback(() => {
@@ -1002,8 +894,6 @@ export function useOpenCodeChat({
   // Clear error - only called explicitly by user action
   const clearError = useCallback(() => {
     setError(null);
-    // Reset status to ready when explicitly clearing error
-    setStatus('ready');
     statusRef.current = 'ready'; // Update ref immediately
     setChatsData(prev => ({
       ...prev,
@@ -1024,7 +914,6 @@ export function useOpenCodeChat({
     setError(null);
 
     // Clear status to allow new attempt
-    setStatus('ready');
     statusRef.current = 'ready';
 
     // Get current messages including error messages
@@ -1052,7 +941,6 @@ export function useOpenCodeChat({
     });
 
     // Update the message list to remove the failed assistant response
-    setMessages(messagesToRetry);
     setChatsData(prev => ({
       ...prev,
       [currentChatId]: {

@@ -6,10 +6,6 @@ export function useConversationLifecycle({
   chat,
   currentChatId,
   createNewChat,
-  selectedModel,
-  apiKey,
-  googleApiKey,
-  openRouterApiKey,
   inputRef,
   isInitialDataLoading,
 }) {
@@ -39,11 +35,40 @@ export function useConversationLifecycle({
     previousChatIdRef.current = currentChatId;
   }, [currentChatId]);
 
+  const pendingMessageRef = useRef(null);
+  const handleSendRef = useRef(null);
+
+  useEffect(() => {
+    // If we are still loading initial data, do not attempt to flush pending messages yet.
+    // We will wait until isInitialDataLoading is false.
+    if (isInitialDataLoading) return;
+
+    if (chat && pendingMessageRef.current) {
+      const message = pendingMessageRef.current;
+      pendingMessageRef.current = null;
+      // Use the ref to ensure we call the latest handleSend
+      handleSendRef.current?.(message);
+    }
+  }, [chat, isInitialDataLoading]);
+
   const handleSend = useCallback(async (message) => {
+    // If initial data is still loading, queue the message and return.
+    if (isInitialDataLoading) {
+      pendingMessageRef.current = message;
+      return;
+    }
+
+    if (!currentChatIdRef.current) {
+      pendingMessageRef.current = message;
+      await createNewChat();
+      return;
+    }
+
     const currentChat = chatRef.current;
-    let chatId = currentChatIdRef.current;
-    if (!chatId) {
-      chatId = await createNewChat();
+    // If we have an ID but no chat instance yet (or it's stale), wait for the effect
+    if (!currentChat || typeof currentChat.sendMessage !== 'function') {
+      pendingMessageRef.current = message;
+      return;
     }
 
     const contexts = attachedContextSnippets
@@ -59,17 +84,8 @@ export function useConversationLifecycle({
     const hasText = combinedText.trim().length > 0;
     const hasAttachments = Boolean(message.files?.length);
     const hasContext = contexts.length > 0;
-    const requiredKey = selectedModel?.type === 'google'
-      ? googleApiKey
-      : selectedModel?.type === 'openrouter'
-        ? openRouterApiKey
-        : apiKey;
 
-    if (!requiredKey || !(hasText || hasAttachments || hasContext) || currentChat.status === 'error') {
-      return;
-    }
-
-    if (currentChat.status !== 'ready') {
+    if (!(hasText || hasAttachments || hasContext)) {
       return;
     }
 
@@ -84,16 +100,8 @@ export function useConversationLifecycle({
     } catch (error) {
       console.error('Error sending message:', error);
     }
-  }, [
-    apiKey,
-    attachedContextSnippets,
-    createNewChat,
-    googleApiKey,
-    openRouterApiKey,
-    selectedModel,
-  ]);
+  }, [attachedContextSnippets, createNewChat]);
 
-  const handleSendRef = useRef(handleSend);
   useEffect(() => {
     handleSendRef.current = handleSend;
   }, [handleSend]);
@@ -108,15 +116,37 @@ export function useConversationLifecycle({
     const requiresNewChat = !currentChatIdRef.current || hasExistingMessages;
 
     if (requiresNewChat) {
-      await createNewChat();
-    }
+      // If we need a new chat, just trigger handleSend with the text.
+      // It will handle creation and pending message queueing.
+      if (inputRef?.current) {
+        // If we have the input, we can just clear the current chat ID ref 
+        // to force a new one, but we need to be careful.
 
-    const textarea = inputRef?.current;
-    if (textarea) {
-      textarea.value = text;
-      textarea.form?.requestSubmit();
+        // If we want to start a fresh chat but just put text in the box:
+
+        // Guard against race with initial load
+        if (!isInitialDataLoading) {
+          await createNewChat();
+        }
+
+        const textarea = inputRef.current;
+        textarea.value = text;
+        textarea.focus();
+      } else {
+        // If no input ref (e.g. popup closed?), send immediately
+        // This will trigger the createNewChat flow in handleSend
+        await handleSendRef.current({ text });
+      }
     } else {
-      await handleSendRef.current({ text });
+      // Existing chat, append to input
+      const textarea = inputRef?.current;
+      if (textarea) {
+        const currentVal = textarea.value;
+        textarea.value = currentVal ? `${currentVal}\n\n${text}` : text;
+        textarea.focus();
+      } else {
+        await handleSendRef.current({ text });
+      }
     }
   }, [createNewChat, inputRef]);
 

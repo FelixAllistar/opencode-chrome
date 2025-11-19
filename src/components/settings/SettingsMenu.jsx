@@ -11,7 +11,8 @@ import { Switch } from '../ui/switch.tsx';
 import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form.tsx';
 import { ApiKeysSection } from './ApiKeysSection.jsx';
 import { TOOL_DEFINITIONS } from '../../services/ai/tools/index';
-import { PROVIDER_TYPES } from '../../utils/constants.js';
+import { PROVIDER_TYPES, PROVIDER_LABELS } from '../../utils/constants.js';
+import { ModelManager } from './ModelManager.jsx';
 
 const settingsSchema = z.object({
   openCodeApiKey: z.string(),
@@ -20,15 +21,10 @@ const settingsSchema = z.object({
   context7ApiKey: z.string(),
   openRouterApiKey: z.string(),
   anthropicApiKey: z.string(),
+  openaiApiKey: z.string(),
 });
 
-const modelSchema = z.object({
-  id: z.string().trim().min(1),
-  name: z.string().trim().min(1),
-  type: z.enum(PROVIDER_TYPES),
-  isVision: z.boolean(),
-  supportsTools: z.boolean()
-});
+
 
 export const SettingsMenu = ({
   apiKey = '',
@@ -46,6 +42,8 @@ export const SettingsMenu = ({
   enabledModelIds = [],
   onToggleModel,
   onAddCustomModel,
+  customModels = [],
+  onDeleteCustomModel,
   providerTypes = PROVIDER_TYPES
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -54,9 +52,10 @@ export const SettingsMenu = ({
   const [lastSavedField, setLastSavedField] = useState(null);
   const savedTimerRef = useRef(null);
   const menuRef = useRef(null);
-  const [isModelsExpanded, setIsModelsExpanded] = useState(false);
-  const [modelMessage, setModelMessage] = useState('');
-  const modelSavedTimerRef = useRef(null);
+
+  const [isToolsExpanded, setIsToolsExpanded] = useState(false);
+  const [isModelManagerOpen, setIsModelManagerOpen] = useState(false);
+
 
   const form = useForm({
     resolver: zodResolver(settingsSchema),
@@ -71,17 +70,7 @@ export const SettingsMenu = ({
     }
   });
 
-  const availableProviders = providerTypes.length > 0 ? providerTypes : PROVIDER_TYPES;
-  const modelForm = useForm({
-    resolver: zodResolver(modelSchema),
-    defaultValues: {
-      id: '',
-      name: '',
-      type: availableProviders[0],
-      isVision: true,
-      supportsTools: true
-    }
-  });
+
 
   useEffect(() => {
     form.reset({
@@ -111,9 +100,7 @@ export const SettingsMenu = ({
       if (savedTimerRef.current) {
         clearTimeout(savedTimerRef.current);
       }
-      if (modelSavedTimerRef.current) {
-        clearTimeout(modelSavedTimerRef.current);
-      }
+
     };
   }, []);
 
@@ -156,25 +143,9 @@ export const SettingsMenu = ({
     setLastSavedField(null);
   };
 
-  const handleAddModel = (values) => {
-    onAddCustomModel?.({
-      ...values,
-      id: values.id.trim(),
-      name: values.name.trim()
-    });
-    setModelMessage('Model added');
-    if (modelSavedTimerRef.current) {
-      clearTimeout(modelSavedTimerRef.current);
-    }
-    modelSavedTimerRef.current = setTimeout(() => {
-      setModelMessage('');
-    }, 2000);
-    modelForm.reset({
-      ...modelForm.getValues(),
-      id: '',
-      name: ''
-    });
-  };
+
+
+  const resolveProviderLabel = (provider) => PROVIDER_LABELS[provider] ?? provider;
 
   return (
     <div ref={menuRef} className="relative">
@@ -205,160 +176,51 @@ export const SettingsMenu = ({
               setActiveField={setActiveField}
             />
             <div className="border-t pt-2 space-y-2">
-              <div className="px-2 py-1 text-xs text-muted-foreground">Tools</div>
-              <div className="space-y-2 px-2">
-                {TOOL_DEFINITIONS.map((definition) => {
-                  const isChecked = enabledTools.includes(definition.id);
-                  return (
-                    <div key={definition.id} className="flex items-center justify-between">
-                      <div className="pr-2">
-                        <p className="text-sm font-medium">{definition.label}</p>
-                        <p className="text-[10px] text-muted-foreground">{definition.description}</p>
+              <button
+                type="button"
+                onClick={() => setIsToolsExpanded((prev) => !prev)}
+                aria-expanded={isToolsExpanded}
+                className="flex w-full items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground"
+              >
+                <span>Tools</span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${isToolsExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {isToolsExpanded && (
+                <div className="space-y-2 px-2">
+                  {TOOL_DEFINITIONS.map((definition) => {
+                    const isChecked = enabledTools.includes(definition.id);
+                    return (
+                      <div key={definition.id} className="flex items-center justify-between">
+                        <div className="pr-2">
+                          <p className="text-sm font-medium">{definition.label}</p>
+                          <p className="text-[10px] text-muted-foreground">{definition.description}</p>
+                        </div>
+                        <Switch
+                          checked={isChecked}
+                          onCheckedChange={(value) => onToggleTool?.(definition.id, Boolean(value))}
+                        />
                       </div>
-                      <Switch
-                        checked={isChecked}
-                        onCheckedChange={(value) => onToggleTool?.(definition.id, Boolean(value))}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="border-t pt-2 space-y-2">
               <button
                 type="button"
-                onClick={() => setIsModelsExpanded((prev) => !prev)}
-                aria-expanded={isModelsExpanded}
-                className="flex w-full items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground"
+                onClick={() => setIsModelManagerOpen(true)}
+                className="flex w-full items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
                 <span>Models</span>
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${isModelsExpanded ? 'rotate-180' : ''}`}
-                />
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {enabledModelIds.length} enabled
+                  </span>
+                  <ChevronDown className="h-4 w-4 -rotate-90 opacity-50" />
+                </div>
               </button>
-              {isModelsExpanded && (
-                <>
-                  <div className="space-y-2 px-2">
-                    {models.map((model) => {
-                      const isChecked = enabledModelIds.includes(model.id);
-                      const capabilityLabel = `${model.type} · ${model.isVision ? 'vision' : 'text'} · ${model.supportsTools ? 'tools' : 'no tools'}`;
-                      return (
-                        <div key={model.id} className="flex items-center justify-between">
-                          <div className="pr-2">
-                            <p className="text-sm font-medium">{model.name}</p>
-                            <p className="text-[10px] text-muted-foreground">{capabilityLabel}</p>
-                          </div>
-                          <Switch
-                            checked={isChecked}
-                            onCheckedChange={(value) => onToggleModel?.(model.id, Boolean(value))}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="border-t pt-2">
-                    <Form {...modelForm}>
-                      <form className="space-y-2 px-2 py-1" onSubmit={modelForm.handleSubmit(handleAddModel)}>
-                        <FormField
-                          control={modelForm.control}
-                          name="id"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs text-muted-foreground">Model ID</FormLabel>
-                              <FormControl>
-                                <input
-                                  {...field}
-                                  type="text"
-                                  className="w-full border px-2 py-1 text-xs rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                                />
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={modelForm.control}
-                          name="name"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs text-muted-foreground">Model Name</FormLabel>
-                              <FormControl>
-                                <input
-                                  {...field}
-                                  type="text"
-                                  className="w-full border px-2 py-1 text-xs rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                                />
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={modelForm.control}
-                          name="type"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs text-muted-foreground">Provider</FormLabel>
-                              <FormControl>
-                                <select
-                                  {...field}
-                                  className="w-full border px-2 py-1 text-xs rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                                >
-                                  {availableProviders.map((provider) => (
-                                    <option key={provider} value={provider}>
-                                      {provider}
-                                    </option>
-                                  ))}
-                                </select>
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={modelForm.control}
-                          name="isVision"
-                          render={({ field }) => (
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-xs font-medium">Vision enabled</p>
-                                <p className="text-[10px] text-muted-foreground">Send inline images/files</p>
-                              </div>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={(value) => field.onChange(Boolean(value))}
-                              />
-                            </div>
-                          )}
-                        />
-                        <FormField
-                          control={modelForm.control}
-                          name="supportsTools"
-                          render={({ field }) => (
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-xs font-medium">Tool support</p>
-                                <p className="text-[10px] text-muted-foreground">
-                                  Allow tool loops for this model
-                                </p>
-                              </div>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={(value) => field.onChange(Boolean(value))}
-                              />
-                            </div>
-                          )}
-                        />
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] text-muted-foreground">
-                            {modelMessage || 'IDs must match the provider API string and appear in the dropdown.'}
-                          </p>
-                          <Button size="sm" type="submit">
-                            Add model
-                          </Button>
-                        </div>
-                      </form>
-                    </Form>
-                  </div>
-                </>
-              )}
             </div>
             <button
               type="button"
@@ -370,6 +232,16 @@ export const SettingsMenu = ({
           </div>
         </div>
       )}
+      <ModelManager
+        open={isModelManagerOpen}
+        onOpenChange={setIsModelManagerOpen}
+        models={models}
+        enabledModelIds={enabledModelIds}
+        customModels={customModels}
+        onToggleModel={onToggleModel}
+        onDeleteCustomModel={onDeleteCustomModel}
+        onAddCustomModel={onAddCustomModel}
+      />
     </div>
   );
 };
