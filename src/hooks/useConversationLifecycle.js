@@ -37,7 +37,8 @@ export function useConversationLifecycle({
 
   const handleSend = useCallback(async (message) => {
     if (!currentChatIdRef.current) {
-      await createNewChat();
+      const newChatId = await createNewChat();
+      currentChatIdRef.current = newChatId;
     }
 
     const currentChat = chatRef.current;

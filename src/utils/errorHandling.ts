@@ -89,7 +89,8 @@ export const createChatError = (kind: ChatErrorKind, input: unknown): ChatError 
 };
 
 export const formatChatError = (error: ChatError): string => {
-  return error.message || 'Unknown error';
+  const prefix = error.kind !== 'unknown' ? `${error.kind}: ` : '';
+  return `${prefix}${error.message || 'Unknown error'}`;
 };
 
 export { filterMessagesForAPI };
@@ -133,16 +134,16 @@ export const createUnhandledRejectionHandler = (
               messages: prev[recentChatId].messages.map((msg: any) =>
                 msg.id === lastAiMessage.id
                   ? {
-                      ...msg,
-                      status: 'error',
-                      parts: [{
-                        type: 'tool-error',
-                        state: 'output-error',
-                        toolCallId: 'error',
-                        errorText: errorForUI.error,
-                        ...errorForUI
-                      }]
-                    }
+                    ...msg,
+                    status: 'error',
+                    parts: [{
+                      type: 'tool-error',
+                      state: 'output-error',
+                      toolCallId: 'error',
+                      errorText: errorForUI.error,
+                      ...errorForUI
+                    }]
+                  }
                   : msg
               )
             }

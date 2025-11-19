@@ -85,7 +85,7 @@ export const ModelManager = ({
     e.preventDefault();
     const trimmedId = newModelId.trim();
     const trimmedName = newModelName.trim();
-    const provider = newModelProvider || providers[0];
+    const provider = newModelProvider;
 
     if (!trimmedId || !trimmedName || !provider) return;
 

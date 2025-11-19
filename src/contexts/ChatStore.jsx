@@ -50,6 +50,12 @@ export function ChatStoreProvider({ children }) {
           await persistCurrentChatId(activeChatId);
         }
 
+        // Validate that the activeChatId actually exists in our data
+        if (activeChatId && !initialChatsData[activeChatId]) {
+          activeChatId = chatsList[0]?.id ?? null;
+          await persistCurrentChatId(activeChatId);
+        }
+
         if (activeChatId && initialChatsData[activeChatId]) {
           const chatMessages = await loadChatMessages(activeChatId);
           initialChatsData[activeChatId].messages = resetStreamingStatus(chatMessages);
@@ -123,7 +129,7 @@ export function ChatStoreProvider({ children }) {
 
   const deleteChatsByIds = useCallback(
     async (chatIds) => {
-      const idsToDelete = Array.from(new Set(chatIds.filter(Boolean)));
+      const idsToDelete = Array.from(new Set((chatIds || []).filter(Boolean)));
       if (idsToDelete.length === 0) return;
 
       await deleteChats(idsToDelete);

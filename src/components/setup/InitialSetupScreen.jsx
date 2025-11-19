@@ -1,4 +1,4 @@
-"use client";
+
 
 import { Button } from "@/components/ui/button";
 import {
@@ -83,6 +83,16 @@ export const InitialSetupScreen = ({ inputs, onInputChange, onSave }) => {
 
   const handleSubmit = (event) => {
     event.preventDefault();
+
+    // Validate at least one provider key is provided
+    const hasAtLeastOneKey = PROVIDER_FIELDS.some(field => inputs[field.id]?.trim());
+
+    if (!hasAtLeastOneKey) {
+      // Ideally show a toast or error state here, but for now we just prevent submission
+      // The description text already says "Save at least one provider key..."
+      return;
+    }
+
     onSave();
   };
 
