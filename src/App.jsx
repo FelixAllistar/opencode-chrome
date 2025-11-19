@@ -375,6 +375,47 @@ function AppContent() {
     [setModelPreferences]
   );
 
+  const removeCustomModel = useCallback(
+    (modelId) => {
+      if (!modelId) {
+        return;
+      }
+
+      setModelPreferences((prev = DEFAULT_MODEL_PREFERENCES) => {
+        const previousCustoms = prev.customModels ?? [];
+        const nextCustoms = previousCustoms.filter((model) => model.id !== modelId);
+        const previousEnabled = Array.isArray(prev.enabledModelIds)
+          ? prev.enabledModelIds
+          : DEFAULT_ENABLED_MODEL_IDS;
+        const nextEnabled = previousEnabled.filter((id) => id !== modelId);
+
+        return {
+          ...prev,
+          customModels: nextCustoms,
+          enabledModelIds: nextEnabled
+        };
+      });
+
+      setSelectedModelId((current) => {
+        if (current !== modelId) {
+          return current;
+        }
+
+        const remainingModels = availableModels.filter((model) => model.id !== modelId);
+        const nextEnabledModels = remainingModels.filter((model) =>
+          (modelPreferences?.enabledModelIds ?? DEFAULT_ENABLED_MODEL_IDS).includes(model.id)
+        );
+
+        if (nextEnabledModels.length > 0) {
+          return nextEnabledModels[0].id;
+        }
+
+        return remainingModels[0]?.id ?? MODELS[0].id;
+      });
+    },
+    [setModelPreferences, availableModels, modelPreferences, setSelectedModelId]
+  );
+
   const addCustomModel = useCallback(
     (modelDefinition) => {
       if (!modelDefinition?.id) {
@@ -821,6 +862,8 @@ function AppContent() {
                   enabledModelIds={enabledModelIds}
                   onToggleModel={toggleModelAvailability}
                   onAddCustomModel={addCustomModel}
+                  customModels={customModels}
+                  onDeleteCustomModel={removeCustomModel}
                   providerTypes={PROVIDER_TYPES}
                 />
               </div>
