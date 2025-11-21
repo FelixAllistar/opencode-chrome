@@ -177,6 +177,110 @@ const mapError = useCallback((err, kind = 'api') => {
     }
   }, [active, session, loadMessages]);
 
+  // Streaming updates via /event
+  useEffect(() => {
+    if (!active || !client || !session?.id || !directory) return undefined;
+    let canceled = false;
+    const subscribe = async () => {
+      try {
+        const events = await client.event.subscribe({
+          query: { directory }
+        });
+        for await (const event of events.stream) {
+          if (canceled) break;
+          // Only handle events for this session when possible
+          const evtSessionId =
+            event?.properties?.sessionID ||
+            event?.properties?.info?.sessionID ||
+            event?.properties?.part?.sessionID;
+          if (evtSessionId && evtSessionId !== session.id) {
+            continue;
+          }
+
+          switch (event?.type) {
+            case 'message.part.updated': {
+              const part = event.properties?.part;
+              const delta = event.properties?.delta;
+              if (!part?.messageID) break;
+              const uiPart = mapPartToUi(part);
+              setMessages((prev) => {
+                const next = [...prev];
+                const idx = next.findIndex((m) => m.id === part.messageID);
+                if (idx === -1) {
+                  next.push({
+                    id: part.messageID,
+                    role: 'assistant',
+                    parts: [uiPart],
+                    status: SUBMITTED
+                  });
+                  return next;
+                }
+                const message = next[idx];
+                const parts = message.parts ? [...message.parts] : [];
+                const partIdx = parts.findIndex((p) => p.id === uiPart.id || p.toolCallId === uiPart.toolCallId);
+                if (uiPart.type === 'text' && typeof delta === 'string') {
+                  // Append delta to existing text part if present
+                  if (partIdx >= 0 && typeof parts[partIdx].text === 'string') {
+                    parts[partIdx] = { ...parts[partIdx], text: parts[partIdx].text + delta };
+                  } else {
+                    parts.push({ ...uiPart, text: delta });
+                  }
+                } else {
+                  if (partIdx >= 0) {
+                    parts[partIdx] = { ...parts[partIdx], ...uiPart };
+                  } else {
+                    parts.push(uiPart);
+                  }
+                }
+                next[idx] = { ...message, parts, status: SUBMITTED };
+                return next;
+              });
+              break;
+            }
+            case 'message.updated': {
+              const info = event.properties?.info;
+              if (!info?.id) break;
+              // No parts delivered here; we only update status/error if present
+              setMessages((prev) => {
+                const next = [...prev];
+                const idx = next.findIndex((m) => m.id === info.id);
+                if (idx === -1) {
+                  next.push({
+                    id: info.id,
+                    role: info.role === 'assistant' ? 'assistant' : 'user',
+                    parts: info.error ? [{ type: 'text', text: formatErrorText(info.error) }] : [],
+                    status: info.error ? ERROR : READY
+                  });
+                  return next;
+                }
+                const message = next[idx];
+                const statusForMessage = info.error ? ERROR : READY;
+                const parts = [...(message.parts || [])];
+                if (info.error) {
+                  parts.push({ type: 'text', text: formatErrorText(info.error) });
+                }
+                next[idx] = { ...message, status: statusForMessage, parts };
+                return next;
+              });
+              break;
+            }
+            default:
+              break;
+          }
+        }
+      } catch (err) {
+        // Ignore subscription errors for now; streaming is best-effort
+        console.warn('OpenCode event stream error', err);
+      }
+    };
+
+    subscribe();
+
+    return () => {
+      canceled = true;
+    };
+  }, [active, client, directory, session?.id]);
+
   const sendMessage = useCallback(
     async (payload) => {
       if (!active || !client) return;
