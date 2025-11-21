@@ -12,6 +12,11 @@ import {
 } from './utils/constants.js';
 import { hasAnyProviderKey as hasAnyProviderKeyConfigured } from '@/utils/models.ts';
 import { TOOL_DEFINITIONS, DEFAULT_ENABLED_TOOL_IDS } from './services/ai/tools/index';
+import { useOpenCodeClient } from './hooks/useOpenCodeClient.js';
+import { useOpenCodeProjects, LOAD_STATUS as LOAD_STATUS_OPENCODE } from './hooks/useOpenCodeProjects.js';
+import { useOpenCodeSessions } from './hooks/useOpenCodeSessions.js';
+import { useOpenCodeSession } from './hooks/useOpenCodeSession.js';
+import { useOpenCodeTuiControls } from './hooks/useOpenCodeTuiControls.js';
 
 import { ThemeProvider } from './contexts/ThemeProvider.jsx';
 import { ChatStoreProvider, useChatStore } from './contexts/ChatStore.jsx';
@@ -122,6 +127,9 @@ function AppContent() {
   const [openRouterApiKey, setOpenRouterApiKey, isOpenRouterApiKeyLoading] = useStorage('openRouterApiKey', '');
   const [anthropicApiKey, setAnthropicApiKey, isAnthropicApiKeyLoading] = useStorage('anthropicApiKey', '');
   const [openaiApiKey, setOpenaiApiKey, isOpenaiApiKeyLoading] = useStorage('openaiApiKey', '');
+  const [opencodeBaseUrl, setOpencodeBaseUrl] = useStorage('opencodeBaseUrl', 'http://localhost:6969');
+  const [mode, setMode] = useStorage('chatMode', 'browser');
+  const isDevMode = mode === 'opencode';
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
   const [modelPreferences, setModelPreferences] = useStorage('modelPreferences', DEFAULT_MODEL_PREFERENCES);
   const customModels = modelPreferences?.customModels ?? [];
@@ -152,6 +160,8 @@ function AppContent() {
   }, [enabledModels, selectedModelId, setSelectedModelId]);
   const [enabledToolIds, setEnabledToolIds] = useStorage('enabledTools', DEFAULT_ENABLED_TOOL_IDS);
   const inputRef = useRef(null);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedSession, setSelectedSession] = useState(null);
   const {
     chatsData,
     currentChatId,
@@ -197,6 +207,86 @@ function AppContent() {
   );
   const hasAnyProviderKey = hasAnyProviderKeyConfigured(providerApiKeys);
 
+  // OpenCode server wiring (Dev mode)
+  const { client: opencodeClient } = useOpenCodeClient({
+    baseUrl: opencodeBaseUrl,
+    active: isDevMode
+  });
+
+  const {
+    projects: opencodeProjects,
+    status: opencodeProjectsStatus,
+    error: opencodeProjectsError,
+    refresh: refreshOpencodeProjects
+  } = useOpenCodeProjects({
+    client: opencodeClient,
+    active: isDevMode
+  });
+
+  const {
+    sessions: opencodeSessions,
+    status: opencodeSessionsStatus,
+    error: opencodeSessionsError,
+    refresh: refreshOpencodeSessions,
+    createSession: createOpencodeSession,
+    deleteSessionById: deleteOpencodeSessionById
+  } = useOpenCodeSessions({
+    client: opencodeClient,
+    project: selectedProject,
+    active: isDevMode
+  });
+
+  const devChat = useOpenCodeSession({
+    client: opencodeClient,
+    project: selectedProject,
+    session: selectedSession,
+    active: isDevMode,
+    onSessionChange: setSelectedSession
+  });
+
+  const tuiControls = useOpenCodeTuiControls({
+    client: opencodeClient,
+    active: isDevMode
+  });
+
+  const formatOpencodeError = useCallback((err) => {
+    if (!err) return null;
+    return err?.message || err?.data?.message || err?.error || 'OpenCode error';
+  }, []);
+
+  const devStatusMessage = useMemo(() => {
+    if (!isDevMode) return null;
+    if (!selectedProject) return 'Select a project to chat with OpenCode.';
+    if (!selectedSession && opencodeSessionsStatus === LOAD_STATUS_OPENCODE.READY && opencodeSessions.length === 0) {
+      return 'No sessions yet in this project. Create one to start chatting.';
+    }
+    if (opencodeProjectsError) return formatOpencodeError(opencodeProjectsError);
+    if (opencodeSessionsError) return formatOpencodeError(opencodeSessionsError);
+    return null;
+  }, [
+    formatOpencodeError,
+    isDevMode,
+    opencodeProjectsError,
+    opencodeSessionsError,
+    opencodeSessions.length,
+    opencodeSessionsStatus,
+    selectedProject,
+    selectedSession
+  ]);
+
+  useEffect(() => {
+    // Reset session selection when switching projects
+    setSelectedSession(null);
+  }, [selectedProject?.id]);
+
+  useEffect(() => {
+    if (!isDevMode) return;
+    // If no project is selected but we have projects, auto-select the first one.
+    if (!selectedProject && opencodeProjects.length > 0) {
+      setSelectedProject(opencodeProjects[0]);
+    }
+  }, [isDevMode, selectedProject, opencodeProjects]);
+
   useUnhandledRejectionHandler({
     currentChatId,
     chatsData,
@@ -221,8 +311,8 @@ function AppContent() {
     });
   }, [setEnabledToolIds]);
 
-  // Use our custom streaming chat hook
-  const chat = useStreamingChat({
+  // Browser mode chat (AI SDK)
+  const browserChat = useStreamingChat({
     currentChatId,
     chatsData,
     setChatsData,
@@ -241,29 +331,61 @@ function AppContent() {
     }
   });
 
+  const chat = isDevMode ? devChat : browserChat;
+
   // The useStreamingChat hook handles updating chatsData internally
 
   // Derived state from chatsData
-  const chats = useMemo(
+  const browserChats = useMemo(
     () =>
       Object.values(chatsData)
         .map((c) => c.metadata)
         .sort((a, b) => b.updatedAt - a.updatedAt),
     [chatsData]
   );
+  const devSidebarItems = useMemo(
+    () =>
+      opencodeSessions.map((session) => ({
+        id: session.id,
+        title: session.title || 'Session',
+        createdAt: session.createdAt || session.updatedAt || Date.now(),
+        updatedAt: session.updatedAt || session.createdAt || Date.now(),
+        messageCount: session.messageCount ?? 0,
+        lastMessage: session.lastMessage ?? '',
+        mode: 'opencode',
+        opencode: {
+          baseUrl: opencodeBaseUrl,
+          projectId: session.projectId,
+          projectWorktree: session.directory,
+          sessionId: session.id,
+          directory: session.directory
+        }
+      })),
+    [opencodeSessions, opencodeBaseUrl]
+  );
+
+  const sidebarChats = isDevMode ? devSidebarItems : browserChats;
+  const effectiveCurrentChatId = isDevMode ? selectedSession?.id : currentChatId;
+  const currentSidebarChat = sidebarChats.find((chat) => chat.id === effectiveCurrentChatId);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState([]);
 
   useEffect(() => {
+    if (isDevMode) {
+      setIsSelectionMode(false);
+      setSelectedChatIds([]);
+      return;
+    }
     setSelectedChatIds((prev) => {
-      const nextSelection = prev.filter((id) => chats.some((chat) => chat.id === id));
+      const nextSelection = prev.filter((id) => sidebarChats.some((chat) => chat.id === id));
       return nextSelection.length === prev.length ? prev : nextSelection;
     });
-  }, [chats]);
+  }, [isDevMode, sidebarChats]);
 
-  const isAllSelected = chats.length > 0 && selectedChatIds.length === chats.length;
+  const isAllSelected = !isDevMode && sidebarChats.length > 0 && selectedChatIds.length === sidebarChats.length;
 
   const handleToggleSelectionMode = useCallback(() => {
+    if (isDevMode) return;
     setIsSelectionMode((prev) => {
       const nextMode = !prev;
       if (!nextMode) {
@@ -271,16 +393,17 @@ function AppContent() {
       }
       return nextMode;
     });
-  }, []);
+  }, [isDevMode]);
 
   const handleSelectAllChats = useCallback(() => {
+    if (isDevMode) return;
     setSelectedChatIds((prev) => {
-      if (chats.length > 0 && prev.length === chats.length) {
+      if (sidebarChats.length > 0 && prev.length === sidebarChats.length) {
         return [];
       }
-      return chats.map((chat) => chat.id);
+      return sidebarChats.map((chat) => chat.id);
     });
-  }, [chats]);
+  }, [isDevMode, sidebarChats]);
 
   const handleToggleChatSelection = useCallback((chatId) => {
     setSelectedChatIds((prev) => {
@@ -292,13 +415,160 @@ function AppContent() {
   }, []);
 
   const handleDeleteSelectedChats = useCallback(async () => {
+    if (isDevMode) return;
     if (selectedChatIds.length === 0) {
       return;
     }
     await deleteChatsByIds(selectedChatIds);
     setSelectedChatIds([]);
     setIsSelectionMode(false);
-  }, [selectedChatIds, deleteChatsByIds]);
+  }, [isDevMode, selectedChatIds, deleteChatsByIds]);
+
+  const selectionMode = isDevMode ? false : isSelectionMode;
+
+  const createDevSession = useCallback(async () => {
+    if (!selectedProject) return null;
+    const newSession = await createOpencodeSession();
+    if (newSession) {
+      setSelectedSession(newSession);
+      return newSession.id;
+    }
+    return null;
+  }, [createOpencodeSession, selectedProject]);
+
+  const effectiveCreateChat = isDevMode ? createDevSession : createNewChat;
+  const effectiveIsInitialLoading = isDevMode
+    ? opencodeSessionsStatus === LOAD_STATUS_OPENCODE.LOADING
+    : isInitialDataLoading;
+
+  const handleSelectSidebarChat = useCallback(
+    async (chatId) => {
+      if (isDevMode) {
+        const target = opencodeSessions.find((session) => session.id === chatId);
+        if (target) {
+          setSelectedSession(target);
+        }
+        return;
+      }
+      await switchChat(chatId);
+    },
+    [isDevMode, opencodeSessions, switchChat]
+  );
+
+  const handleDeleteSidebarChat = useCallback(
+    async (chatId) => {
+      if (isDevMode) {
+        await deleteOpencodeSessionById(chatId);
+        if (selectedSession?.id === chatId) {
+          setSelectedSession(null);
+        }
+        return;
+      }
+      await deleteChatById(chatId);
+    },
+    [deleteChatById, deleteOpencodeSessionById, isDevMode, selectedSession?.id]
+  );
+
+  const handleNewSidebarChat = useCallback(async () => {
+    if (isDevMode) {
+      await createDevSession();
+      return;
+    }
+    await createNewChat();
+  }, [createDevSession, createNewChat, isDevMode]);
+
+  const sendScreenshotToTui = useCallback(async () => {
+    if (!isDevMode) return;
+    if (!chrome?.tabs?.captureVisibleTab) {
+      await tuiControls.showToast('Screenshot capture not available in this browser', 'error');
+      return;
+    }
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const imageDataUrl = await chrome.tabs.captureVisibleTab(
+        activeTab?.windowId,
+        { format: 'png' }
+      );
+      const url = activeTab?.url || '';
+      const title = activeTab?.title || 'Active tab';
+      const promptText = `[browser screenshot]\n${title}\n${url}\n\n![screenshot](${imageDataUrl})`;
+      await tuiControls.appendToPrompt(promptText);
+      await tuiControls.showToast('Screenshot sent to TUI', 'success');
+    } catch (err) {
+      console.error('Failed to send screenshot to TUI', err);
+      await tuiControls.showToast('Failed to send screenshot', 'error');
+    }
+  }, [isDevMode, tuiControls]);
+
+  const sendConsoleLogsToTui = useCallback(async () => {
+    if (!isDevMode) return;
+    if (!chrome?.scripting?.executeScript || !chrome?.tabs?.query) {
+      await tuiControls.showToast('Console capture not available in this browser', 'error');
+      return;
+    }
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab?.id) {
+        await tuiControls.showToast('No active tab for console logs', 'error');
+        return;
+      }
+
+      const [{ result: logs }] = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: () => {
+          const key = '__opencodeConsoleBuffer';
+          if (!window[key]) {
+            window[key] = [];
+            const maxLogs = 100;
+            ['log', 'warn', 'error', 'info', 'debug'].forEach((level) => {
+              const original = console[level];
+              console[level] = (...args) => {
+                try {
+                  window[key].push({
+                    level,
+                    time: Date.now(),
+                    args: args.map((val) => {
+                      try {
+                        return typeof val === 'string' ? val : JSON.stringify(val);
+                      } catch (error) {
+                        return String(val);
+                      }
+                    })
+                  });
+                  if (window[key].length > maxLogs) {
+                    window[key].shift();
+                  }
+                } catch (error) {
+                  // swallow
+                }
+                return original.apply(console, args);
+              };
+            });
+          }
+          return window[key].slice(-50);
+        }
+      });
+
+      const formatted = (logs || [])
+        .map((entry) => {
+          const time = entry?.time ? new Date(entry.time).toISOString() : '';
+          const level = entry?.level || 'log';
+          const text = Array.isArray(entry?.args) ? entry.args.join(' ') : '';
+          return `[${time}] ${level}: ${text}`;
+        })
+        .join('\n');
+
+      const heading = `${activeTab?.title || 'Active tab'}\n${activeTab?.url || ''}`;
+      const body = formatted || 'No captured console logs yet. Listener attached for future logs.';
+      const promptText = `[browser console]\n${heading}\n\n${body}`;
+      await tuiControls.appendToPrompt(promptText);
+      await tuiControls.showToast('Console logs sent to TUI', 'success');
+    } catch (err) {
+      console.error('Failed to send console logs to TUI', err);
+      await tuiControls.showToast('Failed to send console logs', 'error');
+    }
+  }, [isDevMode, tuiControls]);
+
   const currentChatMessages = chat.messages || [];
   const currentChatStatus = chat.status;
 
@@ -308,10 +578,10 @@ function AppContent() {
     removeContextSnippet,
   } = useConversationLifecycle({
     chat,
-    currentChatId,
-    createNewChat,
+    currentChatId: effectiveCurrentChatId,
+    createNewChat: effectiveCreateChat,
     inputRef,
-    isInitialDataLoading,
+    isInitialDataLoading: effectiveIsInitialLoading,
   });
 
   const saveSettings = () => {
@@ -482,7 +752,7 @@ function AppContent() {
   };
 
   useEffect(() => {
-    if (isInitialDataLoading || !currentChatId || !inputRef?.current) {
+    if (effectiveIsInitialLoading || !effectiveCurrentChatId || !inputRef?.current) {
       return undefined;
     }
 
@@ -493,7 +763,7 @@ function AppContent() {
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [isInitialDataLoading, currentChatId, inputRef]);
+  }, [effectiveIsInitialLoading, effectiveCurrentChatId, inputRef]);
 
   // Convert AI SDK 5.0 parts to chain-of-thought format
   const convertPartsToChainOfThought = (parts) => {
@@ -776,16 +1046,22 @@ function AppContent() {
     chat.stop();
   };
 
-  if (
+  const isBaseSettingsLoading =
     isApiKeyLoading ||
     isGoogleApiKeyLoading ||
     isBraveSearchApiKeyLoading ||
     isContext7ApiKeyLoading ||
     isOpenRouterApiKeyLoading ||
     isAnthropicApiKeyLoading ||
-    isModelLoading ||
-    isInitialDataLoading
-  ) {
+    isModelLoading;
+
+  const isAppLoading = isDevMode
+    ? isBaseSettingsLoading ||
+      opencodeProjectsStatus === LOAD_STATUS_OPENCODE.LOADING ||
+      opencodeSessionsStatus === LOAD_STATUS_OPENCODE.LOADING
+    : isBaseSettingsLoading || isInitialDataLoading;
+
+  if (isAppLoading) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-sidebar text-sidebar-foreground">
         <div className="rounded-2xl border border-sidebar-border/60 bg-card px-6 py-5 text-sm text-muted-foreground">
@@ -795,7 +1071,7 @@ function AppContent() {
     );
   }
 
-  if (!hasAnyProviderKey) {
+  if (!hasAnyProviderKey && !isDevMode) {
     return (
       <InitialSetupScreen
         inputs={inputs}
@@ -808,18 +1084,18 @@ function AppContent() {
   return (
     <SidebarProvider>
       <AppSidebar
-        chats={chats}
-        currentChatId={currentChatId}
+        chats={sidebarChats}
+        currentChatId={effectiveCurrentChatId}
         selectedChatIds={selectedChatIds}
-        selectionMode={isSelectionMode}
-        onNewChat={createNewChat}
-        onSelectChat={switchChat}
-        onDeleteChat={deleteChatById}
+        selectionMode={selectionMode}
+        onNewChat={handleNewSidebarChat}
+        onSelectChat={handleSelectSidebarChat}
+        onDeleteChat={handleDeleteSidebarChat}
         onToggleSelectionMode={handleToggleSelectionMode}
         onToggleChatSelection={handleToggleChatSelection}
-        onDeleteSelectedChats={handleDeleteSelectedChats}
-        onSelectAllChats={handleSelectAllChats}
-        isAllSelected={isAllSelected}
+        onDeleteSelectedChats={isDevMode ? () => {} : handleDeleteSelectedChats}
+        onSelectAllChats={isDevMode ? () => {} : handleSelectAllChats}
+        isAllSelected={isDevMode ? false : isAllSelected}
       />
       <SidebarInset className="h-screen flex flex-col">
         <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
@@ -827,9 +1103,27 @@ function AppContent() {
               <div className="flex items-center gap-2">
                 <SidebarTrigger className="-ml-1" />
                 <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-                <Button onClick={createNewChat} variant="ghost" size="default" className="h-12 w-12 p-0">
+                <Button onClick={handleNewSidebarChat} variant="ghost" size="default" className="h-12 w-12 p-0">
                   <Plus className="h-8 w-8" />
                 </Button>
+                <div className="flex items-center gap-1 rounded-full border bg-background px-1 py-1">
+                  <Button
+                    variant={isDevMode ? 'ghost' : 'default'}
+                    size="sm"
+                    className="h-7 px-3 text-xs"
+                    onClick={() => setMode('browser')}
+                  >
+                    Browser
+                  </Button>
+                  <Button
+                    variant={isDevMode ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-7 px-3 text-xs"
+                    onClick={() => setMode('opencode')}
+                  >
+                    Dev
+                  </Button>
+                </div>
                 <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
                   <Breadcrumb>
                     <BreadcrumbList>
@@ -840,12 +1134,83 @@ function AppContent() {
                       </BreadcrumbItem>
                       <BreadcrumbSeparator className="hidden md:block" />
                       <BreadcrumbItem>
-                        <BreadcrumbPage>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Chat' : 'No Chat'}</BreadcrumbPage>
+                        <BreadcrumbPage>{currentSidebarChat ? currentSidebarChat.title : 'No Chat'}</BreadcrumbPage>
                       </BreadcrumbItem>
                     </BreadcrumbList>
                   </Breadcrumb>
               </div>
               <div className="flex items-center space-x-2">
+                {isDevMode && (
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2 text-xs max-w-[160px] truncate"
+                      onClick={() => {
+                        const next = prompt('OpenCode server URL', opencodeBaseUrl);
+                        if (next) {
+                          setOpencodeBaseUrl(next.trim());
+                        }
+                      }}
+                        >
+                          {opencodeBaseUrl.replace(/^https?:\/\//, '')}
+                        </Button>
+                    <div className="flex items-center gap-2">
+                      <label className="text-[11px] text-muted-foreground">Project</label>
+                      <select
+                        className="h-8 rounded-md border bg-background px-2 text-xs"
+                        value={selectedProject?.id || ''}
+                        onChange={(event) => {
+                          const nextProject = opencodeProjects.find((p) => p.id === event.target.value);
+                          setSelectedProject(nextProject || null);
+                          setSelectedSession(null);
+                        }}
+                      >
+                        <option value="">Select project</option>
+                        {opencodeProjects.map((project) => (
+                          <option key={project.id} value={project.id}>
+                            {project.worktree}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-[11px] text-muted-foreground">Session</label>
+                      <select
+                        className="h-8 rounded-md border bg-background px-2 text-xs"
+                        value={selectedSession?.id || ''}
+                        disabled={!selectedProject}
+                        onChange={(event) => {
+                          const target = opencodeSessions.find((session) => session.id === event.target.value);
+                          setSelectedSession(target || null);
+                        }}
+                      >
+                        <option value="">{selectedProject ? 'Select session' : 'Pick a project first'}</option>
+                        {opencodeSessions.map((session) => (
+                          <option key={session.id} value={session.id}>
+                            {session.title || session.id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-8 px-2 text-xs"
+                        onClick={sendConsoleLogsToTui}
+                      >
+                        Send console logs
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 px-2 text-xs"
+                        onClick={sendScreenshotToTui}
+                      >
+                        Send screenshot
+                      </Button>
+                  </div>
+                )}
                 <SettingsMenu
                   apiKey={apiKey}
                   googleApiKey={googleApiKey}
@@ -869,6 +1234,11 @@ function AppContent() {
               </div>
             </div>
         </header>
+        {isDevMode && devStatusMessage && (
+          <div className="mx-4 mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {devStatusMessage}
+          </div>
+        )}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-hidden">
             <Conversation className="h-full">
@@ -884,7 +1254,7 @@ function AppContent() {
                   </div>
                 ) : (
                   currentChatMessages.map((msg, i) => (
-                    <Branch key={`${currentChatId}-${i}`}>
+                    <Branch key={`${effectiveCurrentChatId || 'dev'}-${i}`}>
                       <BranchMessages>
                         <Message from={msg.role}>
                           <MessageContent variant="flat">
@@ -938,7 +1308,7 @@ function AppContent() {
 
           <div className="border-t bg-background p-4">
             <PromptInput onSubmit={handleSend} accept="image/*" multiple globalDrop>
-              <PromptInputBody>
+                <PromptInputBody>
                 {attachedContextSnippets.length > 0 && (
                   <div className="mb-2 flex flex-wrap gap-2">
                     {attachedContextSnippets.map((snippet) => {
@@ -978,18 +1348,25 @@ function AppContent() {
                       <PromptInputActionAddAttachments />
                     </PromptInputActionMenuContent>
                   </PromptInputActionMenu>
-                  <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
-                    <PromptInputModelSelectTrigger>
-                      <PromptInputModelSelectValue />
-                    </PromptInputModelSelectTrigger>
-                    <PromptInputModelSelectContent>
-                      {modelOptions.map((model) => (
-                        <PromptInputModelSelectItem key={model.id} value={model.id}>
-                          {model.name}
-                        </PromptInputModelSelectItem>
-                      ))}
-                    </PromptInputModelSelectContent>
-                  </PromptInputModelSelect>
+                  {!isDevMode && (
+                    <PromptInputModelSelect onValueChange={changeModel} value={selectedModelId}>
+                      <PromptInputModelSelectTrigger>
+                        <PromptInputModelSelectValue />
+                      </PromptInputModelSelectTrigger>
+                      <PromptInputModelSelectContent>
+                        {modelOptions.map((model) => (
+                          <PromptInputModelSelectItem key={model.id} value={model.id}>
+                            {model.name}
+                          </PromptInputModelSelectItem>
+                        ))}
+                      </PromptInputModelSelectContent>
+                    </PromptInputModelSelect>
+                  )}
+                  {isDevMode && (
+                    <div className="text-xs text-muted-foreground px-2">
+                      Dev mode (OpenCode)
+                    </div>
+                  )}
                 </PromptInputTools>
                 <PromptInputSubmit status={currentChatStatus} onStop={stopGeneration} />
               </PromptInputFooter>

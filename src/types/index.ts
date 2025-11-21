@@ -16,6 +16,9 @@ export type ProviderType =
   | 'google'
   | 'openrouter';
 
+// High-level chat grouping. Browser = existing AI SDK flow, opencode = OpenCode server-backed.
+export type ChatMode = 'browser' | 'opencode';
+
 export interface ProviderApiKeys {
   openCode?: string;
   google?: string;
@@ -122,6 +125,14 @@ export interface ChatMetadata {
   updatedAt: number;
   messageCount: number;
   lastMessage: string;
+  mode?: ChatMode;
+  opencode?: {
+    baseUrl: string;
+    projectId: string;
+    projectWorktree: string;
+    sessionId: string;
+    directory: string;
+  };
 }
 
 export interface ChatData {

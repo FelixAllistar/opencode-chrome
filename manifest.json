@@ -3,8 +3,8 @@
   "name": "OpenSidebar",
   "version": "1.0",
   "description": "AI extension sidebar using OpenCode SDK",
-  "permissions": ["sidePanel", "storage", "activeTab", "contextMenus"],
-  "host_permissions": ["https://opencode.ai/*", "https://*/*"],
+  "permissions": ["sidePanel", "storage", "activeTab", "contextMenus", "scripting", "tabs"],
+  "host_permissions": ["https://opencode.ai/*", "https://*/*", "http://*/*"],
   "side_panel": {
     "default_path": "src/sidepanel.html"
   },
