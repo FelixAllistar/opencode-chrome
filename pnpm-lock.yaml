@@ -26,6 +26,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.2.2(react-hook-form@7.66.0(react@19.2.0))
+      '@opencode-ai/sdk':
+        specifier: ^1.0.83
+        version: 1.0.83
       '@openrouter/ai-sdk-provider':
         specifier: ^1.2.1
         version: 1.2.1(ai@5.0.78(zod@4.1.12))(zod@4.1.12)
@@ -529,6 +532,9 @@ packages:
 
   '@mermaid-js/parser@0.6.3':
     resolution: {integrity: sha512-lnjOhe7zyHjc+If7yT4zoedx2vo4sHaTmtkl1+or8BRTnCtDmcTpAjpzDSfCZrshM5bCoz0GyidzadJAH1xobA==}
+
+  '@opencode-ai/sdk@1.0.83':
+    resolution: {integrity: sha512-G0O3Nu7+HGK/sTiEV4nOIqBMRb+o8BIjVoWhzJWNwvqb9wMPpxHcs3y1IRO0BTC4nt6zogDFvU/tiq9tk9sdyg==}
 
   '@openrouter/ai-sdk-provider@1.2.1':
     resolution: {integrity: sha512-sDc+/tlEM9VTsYlZ3YMwD9AHinSNusdLFGQhtb50eo5r68U/yBixEHRsKEevqSspiX3V6J06hU7C25t4KE9iag==}
@@ -3091,6 +3097,8 @@ snapshots:
   '@mermaid-js/parser@0.6.3':
     dependencies:
       langium: 3.3.1
+
+  '@opencode-ai/sdk@1.0.83': {}
 
   '@openrouter/ai-sdk-provider@1.2.1(ai@5.0.78(zod@4.1.12))(zod@4.1.12)':
     dependencies:
