@@ -27,6 +27,13 @@ const mapPartToUi = (part) => {
       return { type: 'text', text: part.text };
     case 'reasoning':
       return { type: 'reasoning', text: part.text };
+    case 'step-start':
+      return { type: 'reasoning', text: part.text || 'Thinking…' };
+    case 'step-finish':
+      return {
+        type: 'reasoning',
+        text: part.text || part.reason || 'Completed step'
+      };
     case 'file':
       return {
         type: 'file',

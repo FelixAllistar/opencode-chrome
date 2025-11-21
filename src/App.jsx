@@ -883,7 +883,10 @@ function AppContent() {
   };
 
   const renderMessageParts = (message) => {
-    if (!message.parts || message.parts.length === 0) {
+    const baseParts = message.parts || [];
+    const convertedParts = convertPartsToChainOfThought(baseParts);
+
+    if (!convertedParts || convertedParts.length === 0) {
       return message.status === 'streaming' ? (
         <div className="flex items-center gap-2 text-muted-foreground">
           <div className="animate-pulse">Thinking...</div>
@@ -892,9 +895,6 @@ function AppContent() {
         <Response />
       );
     }
-
-    // Convert AI SDK 5.0 parts to chain-of-thought format
-    const convertedParts = convertPartsToChainOfThought(message.parts);
 
     return (
       <div className="space-y-4">
