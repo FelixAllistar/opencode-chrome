@@ -162,6 +162,7 @@ function AppContent() {
   const inputRef = useRef(null);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
+  const [devActionBanner, setDevActionBanner] = useState(null);
   const {
     chatsData,
     currentChatId,
@@ -480,7 +481,7 @@ function AppContent() {
   const sendScreenshotToTui = useCallback(async () => {
     if (!isDevMode) return;
     if (!chrome?.tabs?.captureVisibleTab) {
-      await tuiControls.showToast('Screenshot capture not available in this browser', 'error');
+      setDevActionBanner({ type: 'error', text: 'Screenshot capture not available in this browser.' });
       return;
     }
     try {
@@ -493,23 +494,23 @@ function AppContent() {
       const title = activeTab?.title || 'Active tab';
       const promptText = `[browser screenshot]\n${title}\n${url}\n\n![screenshot](${imageDataUrl})`;
       await tuiControls.appendToPrompt(promptText);
-      await tuiControls.showToast('Screenshot sent to TUI', 'success');
+      setDevActionBanner({ type: 'success', text: 'Screenshot queued to TUI prompt.' });
     } catch (err) {
       console.error('Failed to send screenshot to TUI', err);
-      await tuiControls.showToast('Failed to send screenshot', 'error');
+      setDevActionBanner({ type: 'error', text: `Failed to send screenshot: ${err?.message || err}` });
     }
   }, [isDevMode, tuiControls]);
 
   const sendConsoleLogsToTui = useCallback(async () => {
     if (!isDevMode) return;
     if (!chrome?.scripting?.executeScript || !chrome?.tabs?.query) {
-      await tuiControls.showToast('Console capture not available in this browser', 'error');
+      setDevActionBanner({ type: 'error', text: 'Console capture not available in this browser.' });
       return;
     }
     try {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!activeTab?.id) {
-        await tuiControls.showToast('No active tab for console logs', 'error');
+        setDevActionBanner({ type: 'error', text: 'No active tab for console logs.' });
         return;
       }
 
@@ -562,10 +563,10 @@ function AppContent() {
       const body = formatted || 'No captured console logs yet. Listener attached for future logs.';
       const promptText = `[browser console]\n${heading}\n\n${body}`;
       await tuiControls.appendToPrompt(promptText);
-      await tuiControls.showToast('Console logs sent to TUI', 'success');
+      setDevActionBanner({ type: 'success', text: 'Console logs queued to TUI prompt.' });
     } catch (err) {
       console.error('Failed to send console logs to TUI', err);
-      await tuiControls.showToast('Failed to send console logs', 'error');
+      setDevActionBanner({ type: 'error', text: `Failed to send console logs: ${err?.message || err}` });
     }
   }, [isDevMode, tuiControls]);
 
@@ -1098,9 +1099,9 @@ function AppContent() {
         isAllSelected={isDevMode ? false : isAllSelected}
       />
       <SidebarInset className="h-screen flex flex-col">
-        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-            <div className="flex items-center justify-between px-4 w-full">
-              <div className="flex items-center gap-2">
+        <header className="flex h-auto shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 border-b border-border/40">
+            <div className="flex flex-wrap items-center justify-between px-4 py-2 w-full gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <SidebarTrigger className="-ml-1" />
                 <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
                 <Button onClick={handleNewSidebarChat} variant="ghost" size="default" className="h-12 w-12 p-0">
@@ -1139,9 +1140,9 @@ function AppContent() {
                     </BreadcrumbList>
                   </Breadcrumb>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2 justify-end w-full md:w-auto">
                 {isDevMode && (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -1155,43 +1156,45 @@ function AppContent() {
                         >
                           {opencodeBaseUrl.replace(/^https?:\/\//, '')}
                         </Button>
-                    <div className="flex items-center gap-2">
-                      <label className="text-[11px] text-muted-foreground">Project</label>
-                      <select
-                        className="h-8 rounded-md border bg-background px-2 text-xs"
-                        value={selectedProject?.id || ''}
-                        onChange={(event) => {
-                          const nextProject = opencodeProjects.find((p) => p.id === event.target.value);
-                          setSelectedProject(nextProject || null);
-                          setSelectedSession(null);
-                        }}
-                      >
-                        <option value="">Select project</option>
-                        {opencodeProjects.map((project) => (
-                          <option key={project.id} value={project.id}>
-                            {project.worktree}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-[11px] text-muted-foreground">Session</label>
-                      <select
-                        className="h-8 rounded-md border bg-background px-2 text-xs"
-                        value={selectedSession?.id || ''}
-                        disabled={!selectedProject}
-                        onChange={(event) => {
-                          const target = opencodeSessions.find((session) => session.id === event.target.value);
-                          setSelectedSession(target || null);
-                        }}
-                      >
-                        <option value="">{selectedProject ? 'Select session' : 'Pick a project first'}</option>
-                        {opencodeSessions.map((session) => (
-                          <option key={session.id} value={session.id}>
-                            {session.title || session.id}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[11px] text-muted-foreground">Project</span>
+                        <select
+                          className="h-8 rounded-md border bg-background px-2 text-xs min-w-[180px]"
+                          value={selectedProject?.id || ''}
+                          onChange={(event) => {
+                            const nextProject = opencodeProjects.find((p) => p.id === event.target.value);
+                            setSelectedProject(nextProject || null);
+                            setSelectedSession(null);
+                          }}
+                        >
+                          <option value="">Select project</option>
+                          {opencodeProjects.map((project) => (
+                            <option key={project.id} value={project.id}>
+                              {project.worktree}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[11px] text-muted-foreground">Session</span>
+                        <select
+                          className="h-8 rounded-md border bg-background px-2 text-xs min-w-[180px]"
+                          value={selectedSession?.id || ''}
+                          disabled={!selectedProject}
+                          onChange={(event) => {
+                            const target = opencodeSessions.find((session) => session.id === event.target.value);
+                            setSelectedSession(target || null);
+                          }}
+                        >
+                          <option value="">{selectedProject ? 'Select session' : 'Pick a project first'}</option>
+                          {opencodeSessions.map((session) => (
+                            <option key={session.id} value={session.id}>
+                              {session.title || session.id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                     <Button
                       variant="secondary"
@@ -1234,9 +1237,25 @@ function AppContent() {
               </div>
             </div>
         </header>
-        {isDevMode && devStatusMessage && (
-          <div className="mx-4 mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {devStatusMessage}
+        {isDevMode && (devStatusMessage || devActionBanner) && (
+          <div className="mx-4 mt-2 space-y-2">
+            {devStatusMessage && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {devStatusMessage}
+              </div>
+            )}
+            {devActionBanner && (
+              <div
+                className={cn(
+                  'rounded-md px-3 py-2 text-sm',
+                  devActionBanner.type === 'success'
+                    ? 'border border-emerald-600/40 bg-emerald-500/10 text-emerald-700'
+                    : 'border border-destructive/40 bg-destructive/10 text-destructive'
+                )}
+              >
+                {devActionBanner.text}
+              </div>
+            )}
           </div>
         )}
         <div className="flex-1 flex flex-col overflow-hidden">

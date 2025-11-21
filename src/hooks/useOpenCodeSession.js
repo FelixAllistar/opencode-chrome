@@ -8,6 +8,19 @@ const SUBMITTED = 'submitted';
 
 const DEFAULT_FILE_MIME = 'application/octet-stream';
 
+const formatErrorText = (err) => {
+  if (!err) return 'Unknown error';
+  if (typeof err === 'string') return err;
+  if (err?.data?.message) return err.data.message;
+  if (err?.message) return err.message;
+  if (err?.error) return err.error;
+  try {
+    return JSON.stringify(err);
+  } catch (jsonError) {
+    return 'Unknown error';
+  }
+};
+
 const mapPartToUi = (part) => {
   switch (part.type) {
     case 'text':
@@ -37,11 +50,17 @@ const mapPartToUi = (part) => {
 
 const mapMessageToUi = (entry) => {
   const role = entry?.info?.role === 'assistant' ? 'assistant' : 'user';
+  const baseParts = Array.isArray(entry?.parts) ? entry.parts.map(mapPartToUi) : [];
+  const errorPart =
+    entry?.info?.error != null
+      ? [{ type: 'text', text: formatErrorText(entry.info.error) }]
+      : [];
+
   return {
     id: entry?.info?.id || nanoid(),
     role,
-    parts: Array.isArray(entry?.parts) ? entry.parts.map(mapPartToUi) : [],
-    status: READY
+    parts: [...baseParts, ...errorPart],
+    status: entry?.info?.error ? ERROR : READY
   };
 };
 
@@ -69,11 +88,15 @@ export function useOpenCodeSession({
 
   const directory = session?.directory || project?.worktree;
 
-  const mapError = useCallback((err, kind = 'api') => {
-    if (!err) return null;
-    const message = err?.message || err?.data?.message || 'Something went wrong';
-    return { kind, message, error: message, underlying: err };
-  }, []);
+const mapError = useCallback((err, kind = 'api') => {
+  if (!err) return null;
+  const message =
+    err?.data?.message ||
+    err?.message ||
+    err?.error ||
+    'Something went wrong';
+  return { kind, message, error: message, underlying: err };
+}, []);
 
   const ensureSession = useCallback(async () => {
     if (!client) {
@@ -105,18 +128,41 @@ export function useOpenCodeSession({
   const loadMessages = useCallback(async () => {
     if (!client || !session || !directory || !active) return;
     setLoadStatus(LOAD_STATUS.LOADING);
-    const res = await client.session.messages({
-      path: { id: session.id },
-      query: { directory }
-    });
-    if (res.error) {
-      setError(mapError(res.error));
+    try {
+      const res = await client.session.messages({
+        path: { id: session.id },
+        query: { directory }
+      });
+      if (res.error) {
+        setError(mapError(res.error));
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nanoid(),
+            role: 'assistant',
+            parts: [{ type: 'text', text: formatErrorText(res.error) }],
+            status: ERROR
+          }
+        ]);
+        setLoadStatus(LOAD_STATUS.ERROR);
+        return;
+      }
+      const data = Array.isArray(res.data) ? res.data : [];
+      setMessages(data.map(mapMessageToUi));
+      setLoadStatus(LOAD_STATUS.READY);
+    } catch (err) {
+      setError(mapError(err));
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nanoid(),
+          role: 'assistant',
+          parts: [{ type: 'text', text: formatErrorText(err) }],
+          status: ERROR
+        }
+      ]);
       setLoadStatus(LOAD_STATUS.ERROR);
-      return;
     }
-    const data = Array.isArray(res.data) ? res.data : [];
-    setMessages(data.map(mapMessageToUi));
-    setLoadStatus(LOAD_STATUS.READY);
   }, [active, client, directory, session, mapError]);
 
   useEffect(() => {
@@ -135,7 +181,17 @@ export function useOpenCodeSession({
     async (payload) => {
       if (!active || !client) return;
       if (!project?.worktree && !session?.directory) {
-        setError(mapError(new Error('Select a project and session before chatting')));
+        const errObj = new Error('Select a project and session before chatting');
+        setError(mapError(errObj));
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nanoid(),
+            role: 'assistant',
+            parts: [{ type: 'text', text: formatErrorText(errObj) }],
+            status: ERROR
+          }
+        ]);
         setStatus(ERROR);
         return;
       }
@@ -147,7 +203,14 @@ export function useOpenCodeSession({
       setError(null);
       setStatus(SUBMITTED);
 
-      const targetSession = await ensureSession();
+      let targetSession;
+      try {
+        targetSession = await ensureSession();
+      } catch (err) {
+        setError(mapError(err));
+        setStatus(ERROR);
+        return;
+      }
       if (!targetSession) {
         setError(mapError(new Error('Failed to create session')));
         setStatus(ERROR);
@@ -175,22 +238,46 @@ export function useOpenCodeSession({
         ...files.map(toFilePartInput)
       ];
 
-      const res = await client.session.prompt({
-        path: { id: targetSession.id },
-        body: { parts: partsInput },
-        query: { directory: targetSession.directory || project?.worktree }
-      });
+      try {
+        const res = await client.session.prompt({
+          path: { id: targetSession.id },
+          body: { parts: partsInput },
+          query: { directory: targetSession.directory || project?.worktree }
+        });
 
-      if (res.error || !res.data) {
-        setError(mapError(res.error || new Error('Failed to send message')));
+        if (res.error || !res.data) {
+          const errObj = res.error || new Error('Failed to send message');
+          setError(mapError(errObj));
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: nanoid(),
+              role: 'assistant',
+              parts: [{ type: 'text', text: formatErrorText(errObj) }],
+              status: ERROR
+            }
+          ]);
+          setStatus(ERROR);
+          return;
+        }
+
+        const assistantMessage = mapMessageToUi(res.data);
+        setMessages((prev) => [...prev, assistantMessage]);
+        setStatus(READY);
+        setError(null);
+      } catch (err) {
+        setError(mapError(err));
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nanoid(),
+            role: 'assistant',
+            parts: [{ type: 'text', text: formatErrorText(err) }],
+            status: ERROR
+          }
+        ]);
         setStatus(ERROR);
-        return;
       }
-
-      const assistantMessage = mapMessageToUi(res.data);
-      setMessages((prev) => [...prev, assistantMessage]);
-      setStatus(READY);
-      setError(null);
     },
     [active, client, ensureSession, mapError, project, session]
   );
