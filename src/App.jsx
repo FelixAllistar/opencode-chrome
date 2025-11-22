@@ -35,6 +35,7 @@ import {
   SidebarInset,
   SidebarTrigger,
 } from './components/ui/sidebar.jsx';
+import { cn } from '@/lib/utils';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -128,6 +129,16 @@ function AppContent() {
   const [anthropicApiKey, setAnthropicApiKey, isAnthropicApiKeyLoading] = useStorage('anthropicApiKey', '');
   const [openaiApiKey, setOpenaiApiKey, isOpenaiApiKeyLoading] = useStorage('openaiApiKey', '');
   const [opencodeBaseUrl, setOpencodeBaseUrl] = useStorage('opencodeBaseUrl', 'http://localhost:6969');
+  const [
+    lastOpencodeProjectId,
+    setLastOpencodeProjectId,
+    isLastOpencodeProjectIdLoading
+  ] = useStorage('opencodeLastProjectId', null);
+  const [
+    lastOpencodeSessionId,
+    setLastOpencodeSessionId,
+    isLastOpencodeSessionIdLoading
+  ] = useStorage('opencodeLastSessionId', null);
   const [mode, setMode] = useStorage('chatMode', 'browser');
   const isDevMode = mode === 'opencode';
   const [selectedModelId, setSelectedModelId, isModelLoading] = useStorage('selectedModelId', MODELS[0].id);
@@ -162,6 +173,7 @@ function AppContent() {
   const inputRef = useRef(null);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
+  const previousProjectIdRef = useRef(null);
   const [devActionBanner, setDevActionBanner] = useState(null);
   const {
     chatsData,
@@ -221,7 +233,8 @@ function AppContent() {
     refresh: refreshOpencodeProjects
   } = useOpenCodeProjects({
     client: opencodeClient,
-    active: isDevMode
+    active: isDevMode,
+    baseUrl: opencodeBaseUrl
   });
 
   const {
@@ -234,7 +247,8 @@ function AppContent() {
   } = useOpenCodeSessions({
     client: opencodeClient,
     project: selectedProject,
-    active: isDevMode
+    active: isDevMode,
+    baseUrl: opencodeBaseUrl
   });
 
   const devChat = useOpenCodeSession({
@@ -255,8 +269,28 @@ function AppContent() {
     return err?.message || err?.data?.message || err?.error || 'OpenCode error';
   }, []);
 
+  const isOpencodeOffline = useMemo(
+    () =>
+      isDevMode &&
+      (opencodeProjectsStatus === LOAD_STATUS_OPENCODE.ERROR ||
+        opencodeSessionsStatus === LOAD_STATUS_OPENCODE.ERROR),
+    [isDevMode, opencodeProjectsStatus, opencodeSessionsStatus]
+  );
+
   const devStatusMessage = useMemo(() => {
     if (!isDevMode) return null;
+    if (isOpencodeOffline) {
+      return (
+        formatOpencodeError(opencodeProjectsError || opencodeSessionsError) ||
+        'OpenCode is not reachable. Start the server and retry.'
+      );
+    }
+    if (
+      opencodeProjectsStatus === LOAD_STATUS_OPENCODE.LOADING ||
+      opencodeSessionsStatus === LOAD_STATUS_OPENCODE.LOADING
+    ) {
+      return 'Connecting to OpenCode…';
+    }
     if (!selectedProject) return 'Select a project to chat with OpenCode.';
     if (!selectedSession && opencodeSessionsStatus === LOAD_STATUS_OPENCODE.READY && opencodeSessions.length === 0) {
       return 'No sessions yet in this project. Create one to start chatting.';
@@ -267,6 +301,8 @@ function AppContent() {
   }, [
     formatOpencodeError,
     isDevMode,
+    isOpencodeOffline,
+    opencodeProjectsStatus,
     opencodeProjectsError,
     opencodeSessionsError,
     opencodeSessions.length,
@@ -276,17 +312,118 @@ function AppContent() {
   ]);
 
   useEffect(() => {
-    // Reset session selection when switching projects
-    setSelectedSession(null);
-  }, [selectedProject?.id]);
+    if (!isDevMode) return;
+    const nextProjectId = selectedProject?.id || null;
+    const prevProjectId = previousProjectIdRef.current;
+    // Only clear session state when we move between two concrete projects.
+    if (nextProjectId && prevProjectId && nextProjectId !== prevProjectId) {
+      setSelectedSession(null);
+      if (lastOpencodeSessionId) {
+        setLastOpencodeSessionId(null);
+      }
+    }
+    previousProjectIdRef.current = nextProjectId;
+  }, [
+    isDevMode,
+    lastOpencodeSessionId,
+    selectedProject?.id,
+    setLastOpencodeSessionId
+  ]);
 
   useEffect(() => {
     if (!isDevMode) return;
-    // If no project is selected but we have projects, auto-select the first one.
+    if (isLastOpencodeProjectIdLoading) return;
+    const nextProjectId = selectedProject?.id || null;
+    // Do not overwrite stored value when there is no active project;
+    // this would erase the last selection on startup before we restore it.
+    if (!nextProjectId) return;
+    if (lastOpencodeProjectId === nextProjectId) return;
+    setLastOpencodeProjectId(nextProjectId);
+  }, [
+    isDevMode,
+    isLastOpencodeProjectIdLoading,
+    lastOpencodeProjectId,
+    selectedProject?.id,
+    setLastOpencodeProjectId
+  ]);
+
+  useEffect(() => {
+    if (!isDevMode) return;
+    if (isLastOpencodeSessionIdLoading) return;
+    const nextSessionId = selectedSession?.id || null;
+    // Avoid clearing the stored session when nothing is selected yet;
+    // we explicitly clear it when switching projects instead.
+    if (!nextSessionId) return;
+    if (lastOpencodeSessionId === nextSessionId) return;
+    setLastOpencodeSessionId(nextSessionId);
+  }, [
+    isDevMode,
+    isLastOpencodeSessionIdLoading,
+    lastOpencodeSessionId,
+    selectedSession?.id,
+    setLastOpencodeSessionId
+  ]);
+
+  const handleRetryOpencode = useCallback(() => {
+    refreshOpencodeProjects();
+    if (selectedProject) {
+      refreshOpencodeSessions();
+    }
+  }, [refreshOpencodeProjects, refreshOpencodeSessions, selectedProject]);
+
+  useEffect(() => {
+    if (!isDevMode) return;
+    if (isLastOpencodeProjectIdLoading) return;
+    if (opencodeProjectsStatus !== LOAD_STATUS_OPENCODE.READY) return;
+    if (selectedProject?.id) return;
+
+    if (lastOpencodeProjectId) {
+      const storedProject = opencodeProjects.find((p) => p.id === lastOpencodeProjectId);
+      if (storedProject) {
+        setSelectedProject(storedProject);
+        return;
+      }
+    }
+
     if (!selectedProject && opencodeProjects.length > 0) {
       setSelectedProject(opencodeProjects[0]);
     }
-  }, [isDevMode, selectedProject, opencodeProjects]);
+  }, [
+    isDevMode,
+    isLastOpencodeProjectIdLoading,
+    lastOpencodeProjectId,
+    opencodeProjects,
+    opencodeProjectsStatus,
+    selectedProject?.id
+  ]);
+
+  useEffect(() => {
+    if (!isDevMode) return;
+    if (isLastOpencodeSessionIdLoading) return;
+    if (!selectedProject?.id) return;
+    if (opencodeSessionsStatus !== LOAD_STATUS_OPENCODE.READY) return;
+    if (selectedSession?.id) return;
+
+    if (lastOpencodeSessionId) {
+      const storedSession = opencodeSessions.find((s) => s.id === lastOpencodeSessionId);
+      if (storedSession) {
+        setSelectedSession(storedSession);
+        return;
+      }
+    }
+
+    if (opencodeSessions.length > 0) {
+      setSelectedSession(opencodeSessions[0]);
+    }
+  }, [
+    isDevMode,
+    isLastOpencodeSessionIdLoading,
+    lastOpencodeSessionId,
+    opencodeSessions,
+    opencodeSessionsStatus,
+    selectedProject?.id,
+    selectedSession?.id
+  ]);
 
   useUnhandledRejectionHandler({
     currentChatId,
@@ -1057,9 +1194,7 @@ function AppContent() {
     isModelLoading;
 
   const isAppLoading = isDevMode
-    ? isBaseSettingsLoading ||
-      opencodeProjectsStatus === LOAD_STATUS_OPENCODE.LOADING ||
-      opencodeSessionsStatus === LOAD_STATUS_OPENCODE.LOADING
+    ? isBaseSettingsLoading
     : isBaseSettingsLoading || isInitialDataLoading;
 
   if (isAppLoading) {
@@ -1241,7 +1376,21 @@ function AppContent() {
           <div className="mx-4 mt-2 space-y-2">
             {devStatusMessage && (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {devStatusMessage}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>{devStatusMessage}</span>
+                  {isOpencodeOffline && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 px-3 text-xs"
+                        onClick={handleRetryOpencode}
+                      >
+                        Retry connection
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             {devActionBanner && (

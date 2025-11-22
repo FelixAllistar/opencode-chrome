@@ -328,22 +328,6 @@ const mapError = useCallback((err, kind = 'api') => {
         return;
       }
 
-      const userMessage = {
-        id: nanoid(),
-        role: 'user',
-        parts: [
-          ...(text ? [{ type: 'text', text }] : []),
-          ...files.map((file) => ({
-            type: 'file',
-            url: file.url,
-            mediaType: file.mediaType || DEFAULT_FILE_MIME,
-            filename: file.filename
-          }))
-        ],
-        status: READY
-      };
-      setMessages((prev) => [...prev, userMessage]);
-
       const partsInput = [
         ...(text ? [{ type: 'text', text }] : []),
         ...files.map(toFilePartInput)
@@ -372,8 +356,8 @@ const mapError = useCallback((err, kind = 'api') => {
           return;
         }
 
-        const assistantMessage = mapMessageToUi(res.data);
-        setMessages((prev) => [...prev, assistantMessage]);
+        // Do not insert local messages here; the event stream will supply both
+        // user and assistant entries. This keeps IDs aligned and avoids dupes.
         setStatus(READY);
         setError(null);
       } catch (err) {

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LOAD_STATUS } from './useOpenCodeProjects.js';
 
+const REQUEST_TIMEOUT_MS = 4000;
+
 /**
  * Lists and creates sessions for a selected project (worktree).
  */
-export function useOpenCodeSessions({ client, project, active }) {
+export function useOpenCodeSessions({ client, project, active, baseUrl }) {
   const [sessions, setSessions] = useState([]);
   const [status, setStatus] = useState(LOAD_STATUS.IDLE);
   const [error, setError] = useState(null);
@@ -14,31 +16,52 @@ export function useOpenCodeSessions({ client, project, active }) {
     setStatus(LOAD_STATUS.LOADING);
     setError(null);
 
-    const res = await client.session.list({
-      query: { directory: project.worktree }
-    });
-
-    if (res.error) {
-      setError(res.error);
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      setError(
+        new Error(
+          `OpenCode is not reachable${baseUrl ? ` at ${baseUrl}` : ''}. Start the server and retry.`
+        )
+      );
       setStatus(LOAD_STATUS.ERROR);
-      return;
-    }
+    }, REQUEST_TIMEOUT_MS);
 
-    const data = Array.isArray(res.data) ? res.data : [];
-    setSessions(
-      data.map((session) => ({
-        id: session.id,
-        projectId: session.projectID,
-        directory: session.directory,
-        title: session.title,
-        createdAt: session.time?.created,
-        updatedAt: session.time?.updated,
-        messageCount: session.summary?.diffs?.length ?? 0,
-        lastMessage: ''
-      }))
-    );
-    setStatus(LOAD_STATUS.READY);
-  }, [active, client, project]);
+    try {
+      const res = await client.session.list({
+        query: { directory: project.worktree }
+      });
+
+      if (timedOut) return;
+      clearTimeout(timeoutId);
+
+      if (res.error) {
+        setError(res.error);
+        setStatus(LOAD_STATUS.ERROR);
+        return;
+      }
+
+      const data = Array.isArray(res.data) ? res.data : [];
+      setSessions(
+        data.map((session) => ({
+          id: session.id,
+          projectId: session.projectID,
+          directory: session.directory,
+          title: session.title,
+          createdAt: session.time?.created,
+          updatedAt: session.time?.updated,
+          messageCount: session.summary?.diffs?.length ?? 0,
+          lastMessage: ''
+        }))
+      );
+      setStatus(LOAD_STATUS.READY);
+    } catch (err) {
+      if (timedOut) return;
+      clearTimeout(timeoutId);
+      setError(err);
+      setStatus(LOAD_STATUS.ERROR);
+    }
+  }, [active, baseUrl, client, project]);
 
   const createSession = useCallback(
     async (title) => {

@@ -34,7 +34,7 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 - The UI now supports a **mode switch** (Browser vs Dev/OpenCode). Browser mode uses `useStreamingChat` (AI SDK) and the existing chat storage; Dev mode talks to a running OpenCode server (configurable `opencodeBaseUrl`, default `http://localhost:6969`) and drives sessions via `useOpenCodeSession`. Project/session selection lives in the header; Dev-mode chats are not stored in `chatStorage` and use the OpenCode session APIs directly.
 - Dev-mode helpers live in `src/hooks/useOpenCodeClient.js`, `useOpenCodeProjects.js`, `useOpenCodeSessions.js`, `useOpenCodeSession.js`, and `useOpenCodeTuiControls.js`. The header exposes project/session selects plus quick actions to send the active tab’s console logs or a screenshot to the TUI via `/tui/append-prompt`.
 - Errors from OpenCode SDK calls surface in the extension’s banner; TUI toasts are not used for Dev-mode errors/success.
-- Dev mode subscribes to the OpenCode `/event` stream so message parts/errors stream into the chat UI in real time. OpenCode step parts are normalized to reasoning text, and the existing chain-of-thought renderer still wraps tool/reasoning parts.
+- Dev mode subscribes to the OpenCode `/event` stream so message parts/errors stream into the chat UI in real time. There is no optimistic insertion of user/assistant messages in Dev mode—`useOpenCodeSession` relies entirely on the event stream and `session.messages` APIs as the single source of truth to avoid duplicate messages. OpenCode step parts are normalized to reasoning text, and the existing chain-of-thought renderer still wraps tool/reasoning parts.
 
 ### Permissions
 - `manifest.json` now includes `tabs`, `scripting`, `activeTab`, and `<all_urls>` so capturing screenshots/console logs for Dev-mode TUI actions works without extra prompts.
@@ -45,6 +45,8 @@ NEVER run `pnpm run build` or `pnpm run dev`; the user is responsible for produc
 - A persistent footer holds `PromptInput` plus attachments, a model selector built from `MODELS` (`src/utils/constants.js` – each entry now ships an `isVision` flag so we can skip image parts for non-vision models, and `big-pickle`/`grok-code` are the current non-vision entries), and `PromptInputSubmit` (which uses `chat.status` to show “stop”/“retry” states). `MODELS` now also includes the Google Gemini entries (Gemini 1.5 Flash, Gemini 1.5 Pro, Gemini 2.5 Pro) flagged as `type: 'google'`.
 - `chat` (returned by `useStreamingChat`) exposes `messages`, `status`, `error`, and helpers like `sendMessage`, `stop`, `reload`, `clearError`, and `resetChatState`.
 - Theme preference uses `useStorage('theme')` plus `ThemeProvider` (see below) and writes CSS custom properties on `document.documentElement` for real‑time switching.
+- Dev mode remembers the last selected project/session via `useStorage('opencodeLastProjectId')` and `useStorage('opencodeLastSessionId')`, restoring them on load when available.
+- Persistence for the last project/session only writes non-null IDs once storage has finished loading and a concrete selection exists; startup never overwrites stored values with `null`, and switching projects explicitly clears the stored session ID so the next load can pick an appropriate session for the new project.
 - `clearSettings` wipes both `chrome.storage.sync` and `.local` and resets `apiKey`, `googleApiKey`, `selectedModel`, `theme`, and `chatsData`.
 
 ### Theme system
