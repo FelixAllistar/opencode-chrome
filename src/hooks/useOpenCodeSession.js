@@ -24,18 +24,20 @@ const formatErrorText = (err) => {
 const mapPartToUi = (part) => {
   switch (part.type) {
     case 'text':
-      return { type: 'text', text: part.text };
+      return { id: part.id, type: 'text', text: part.text };
     case 'reasoning':
-      return { type: 'reasoning', text: part.text };
+      return { id: part.id, type: 'reasoning', text: part.text };
     case 'step-start':
-      return { type: 'reasoning', text: part.text || 'Thinking…' };
+      return { id: part.id, type: 'reasoning', text: part.text || 'Thinking…' };
     case 'step-finish':
       return {
+        id: part.id,
         type: 'reasoning',
         text: part.text || part.reason || 'Completed step'
       };
     case 'file':
       return {
+        id: part.id,
         type: 'file',
         url: part.url,
         mediaType: part.mime,
@@ -43,6 +45,7 @@ const mapPartToUi = (part) => {
       };
     case 'tool':
       return {
+        id: part.id,
         type: `tool-${part.tool}`,
         state: part.state?.status,
         input: part.state?.input,
@@ -209,6 +212,12 @@ const mapError = useCallback((err, kind = 'api') => {
               const part = event.properties?.part;
               const delta = event.properties?.delta;
               if (!part?.messageID) break;
+              console.log('[OpenCode] part.updated', {
+                type: part.type,
+                hasText: Boolean(part.text),
+                id: part.id,
+                messageId: part.messageID,
+              });
               const uiPart = mapPartToUi(part);
               setMessages((prev) => {
                 const next = [...prev];
@@ -269,9 +278,14 @@ const mapError = useCallback((err, kind = 'api') => {
                 next[idx] = { ...message, status: statusForMessage, parts };
                 return next;
               });
+              if (!info?.error) {
+                // Pull the full message to hydrate any missing final text
+                void loadMessages();
+              }
               break;
             }
             default:
+              console.log('[OpenCode] unhandled event', event?.type);
               break;
           }
         }
@@ -286,7 +300,7 @@ const mapError = useCallback((err, kind = 'api') => {
     return () => {
       canceled = true;
     };
-  }, [active, client, directory, session?.id]);
+  }, [active, client, directory, session?.id, loadMessages]);
 
   const sendMessage = useCallback(
     async (payload) => {

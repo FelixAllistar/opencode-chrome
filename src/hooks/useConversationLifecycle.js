@@ -49,7 +49,7 @@ export function useConversationLifecycle({
       // Use the ref to ensure we call the latest handleSend
       handleSendRef.current?.(message);
     }
-  }, [chat, isInitialDataLoading]);
+  }, [chat, isInitialDataLoading, currentChatId]);
 
   const handleSend = useCallback(async (message) => {
     // If initial data is still loading, queue the message and return.
@@ -100,7 +100,7 @@ export function useConversationLifecycle({
     } catch (error) {
       console.error('Error sending message:', error);
     }
-  }, [attachedContextSnippets, createNewChat]);
+  }, [attachedContextSnippets, createNewChat, isInitialDataLoading]);
 
   useEffect(() => {
     handleSendRef.current = handleSend;
@@ -148,7 +148,7 @@ export function useConversationLifecycle({
         await handleSendRef.current({ text });
       }
     }
-  }, [createNewChat, inputRef]);
+  }, [createNewChat, inputRef, isInitialDataLoading]);
 
   const commitAttachContext = useCallback(async (text) => {
     if (!currentChatIdRef.current) {
