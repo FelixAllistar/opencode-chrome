@@ -45,6 +45,7 @@ import {
 import { MessageParts } from './components/ai-elements/message-parts.tsx';
 import { AppHeader } from './components/AppHeader.jsx';
 import { ChatFooter } from './components/ChatFooter.jsx';
+import { Button } from './components/ui/button.jsx';
 
 function AppContent() {
   const [apiKey, setApiKey, isApiKeyLoading] = useStorage('apiKey', '');

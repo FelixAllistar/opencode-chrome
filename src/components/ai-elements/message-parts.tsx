@@ -70,6 +70,9 @@ const convertPartsToChainOfThought = (parts: any[]) => {
   };
 
   parts.forEach((part, index) => {
+    if (!part) {
+      return;
+    }
     if (part.type === "reasoning") {
       chainOfThoughtSteps.push({
         label: CHAIN_OF_THOUGHT_LABELS.THINKING,
@@ -166,7 +169,7 @@ type MessagePartsProps = {
 };
 
 export function MessageParts({ message }: MessagePartsProps) {
-  const baseParts = message.parts || [];
+  const baseParts = (message.parts || []).filter(Boolean);
   const convertedParts = convertPartsToChainOfThought(baseParts);
 
   if (!convertedParts || convertedParts.length === 0) {
@@ -328,4 +331,3 @@ export function MessageParts({ message }: MessagePartsProps) {
     </div>
   );
 }
-

@@ -28,13 +28,11 @@ const mapPartToUi = (part) => {
     case 'reasoning':
       return { id: part.id, type: 'reasoning', text: part.text };
     case 'step-start':
-      return { id: part.id, type: 'reasoning', text: part.text || 'Thinking…' };
+      // Steps arrive as their own phase; we don't need to render a separate
+      // placeholder since the reasoning parts carry the actual text.
+      return null;
     case 'step-finish':
-      return {
-        id: part.id,
-        type: 'reasoning',
-        text: part.text || part.reason || 'Completed step'
-      };
+      return null;
     case 'file':
       return {
         id: part.id,
@@ -219,6 +217,9 @@ const mapError = useCallback((err, kind = 'api') => {
                 messageId: part.messageID,
               });
               const uiPart = mapPartToUi(part);
+              if (!uiPart) {
+                break;
+              }
               setMessages((prev) => {
                 const next = [...prev];
                 const idx = next.findIndex((m) => m.id === part.messageID);
