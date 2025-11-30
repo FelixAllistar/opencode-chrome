@@ -8,6 +8,7 @@ export function useConversationLifecycle({
   createNewChat,
   inputRef,
   isInitialDataLoading,
+  mode,
 }) {
   const [attachedContextSnippets, setAttachedContextSnippets] = useState([]);
   const chatRef = useRef(chat);
@@ -15,6 +16,13 @@ export function useConversationLifecycle({
   const currentChatMessagesRef = useRef([]);
   const previousChatIdRef = useRef(currentChatId);
   const pendingAttachQueueRef = useRef([]);
+
+  // Clear queues when switching modes (e.g. Dev <-> Browser)
+  useEffect(() => {
+    pendingMessageRef.current = null;
+    pendingAttachQueueRef.current = [];
+    setAttachedContextSnippets([]);
+  }, [mode]);
 
   useEffect(() => {
     chatRef.current = chat;
@@ -60,7 +68,12 @@ export function useConversationLifecycle({
 
     if (!currentChatIdRef.current) {
       pendingMessageRef.current = message;
-      await createNewChat();
+      const newChatId = await createNewChat();
+      // If we failed to create a chat (e.g., Dev mode with no project/OpenCode offline),
+      // drop the pending message instead of leaving it queued across mode switches.
+      if (!newChatId) {
+        pendingMessageRef.current = null;
+      }
       return;
     }
 

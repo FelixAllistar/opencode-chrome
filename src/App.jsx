@@ -635,6 +635,7 @@ function AppContent() {
     createNewChat: effectiveCreateChat,
     inputRef,
     isInitialDataLoading: effectiveIsInitialLoading,
+    mode,
   });
 
   const saveSettings = () => {
@@ -807,8 +808,8 @@ function AppContent() {
         onDeleteChat={handleDeleteSidebarChat}
         onToggleSelectionMode={handleToggleSelectionMode}
         onToggleChatSelection={handleToggleChatSelection}
-        onDeleteSelectedChats={isDevMode ? () => {} : handleDeleteSelectedChats}
-        onSelectAllChats={isDevMode ? () => {} : handleSelectAllChats}
+        onDeleteSelectedChats={isDevMode ? () => { } : handleDeleteSelectedChats}
+        onSelectAllChats={isDevMode ? () => { } : handleSelectAllChats}
         isAllSelected={isDevMode ? false : isAllSelected}
       />
       <SidebarInset className="h-screen flex flex-col">
